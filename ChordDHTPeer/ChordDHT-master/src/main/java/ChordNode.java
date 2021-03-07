@@ -208,7 +208,7 @@ public interface ChordNode extends Remote {
      * @return boolean Indicator to check if operation was successful or not
      * @throws RemoteException Due to RMI.
      */
-    boolean insert_key_local(int keyID, String key, String value, Result result) throws RemoteException;
+    boolean insert_key_local(int keyID, String key, String value, Result result,boolean insertHere) throws RemoteException;
 
     /**
      * Function to delete key value pair in current Chord Node instance
