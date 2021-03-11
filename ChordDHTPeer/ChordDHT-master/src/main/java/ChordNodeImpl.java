@@ -193,7 +193,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         while (running) {
             System.out.println("\nMenu: \n1. Print Finger Table"
-                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring");
+                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring\n10. Overlay");
             System.out.println("Enter your choice: ");
             try {
                 choice = sc.nextInt();
@@ -532,6 +532,11 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     } else {
                         System.out.println("Error: Cannot leave ring right now");
                     }
+                    break;
+                case 10:
+                    ArrayList<Integer> topology = new ArrayList<>();
+                    topology=bootstrap.getNodesTopology();
+                    System.out.println(topology);
                     break;
                 default:
                     break;

@@ -231,4 +231,11 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         }
         return is_filled;
     }
+
+    public ArrayList<Integer> getNodesTopology() throws RemoteException {
+        ArrayList<Integer> res = new ArrayList<Integer>();
+        res=nodeIds;
+        Collections.sort(res);
+        return res;
+    }
 }

@@ -82,4 +82,6 @@ public interface BootStrapNode extends Remote {
      * @throws RemoteException Due to RMI.
      */
     NodeInfo findNewSuccessor(NodeInfo n, NodeInfo dead_node) throws RemoteException;
+
+    ArrayList<Integer> getNodesTopology() throws RemoteException; 
 }
