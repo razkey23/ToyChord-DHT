@@ -30,7 +30,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     /**
      * Number of identifier bits.
      */
-    private static int replicaK=2;
+    private static int replication_Factor=2;
     private static int m = 10;
 
     /**
@@ -940,7 +940,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             log.info("Starting key migration");
             try {
                 c = (ChordNode) Naming.lookup("rmi://" + suc.ipaddress + "/ChordNode_" + suc.port);
-                c.migrate_keys(this.predecessor, this.node, result);
+                //c.migrate_keys(this.predecessor, this.node, result);
                 if (this.node.nodeID != suc.nodeID)
                     result.hopCount++;
             } catch (Exception e) {
@@ -1034,7 +1034,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             if (n != this.node) {
                 ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
-                boolean flag = c.insert_key_local(keyID, key, value, result,false);
+                boolean flag = c.insert_key_local(keyID, key, value, result,false,0);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
                 result.latency = timetaken;
@@ -1042,7 +1042,9 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 log.info("Time taken for insert key operation: " + timetaken + "ms");
                 return flag;
             } else {
-                boolean flag = insert_key_local(keyID, key, value, result,false);
+                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
+                boolean flag=insert_key_local(keyID,key,value,result,true,0);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
                 result.latency = timetaken;
@@ -1056,6 +1058,10 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         }
     }
 
+
+
+
+
     @Override
     public boolean delete_key(String key, Result result) {
         try {
@@ -1065,9 +1071,9 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             if (n != this.node) {
                 ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
-                return c.delete_key_local(keyID, key, result);
+                return c.delete_key_local(keyID, key, result,false,0);
             } else {
-                return delete_key_local(keyID, key, result);
+                return delete_key_local(keyID, key, result,false,0);
             }
         } catch (Exception e) {
             log.error("Error in deleting key" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -1104,10 +1110,9 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public boolean insert_key_local(int keyID, String key, String value, Result result,boolean insertHere) throws RemoteException {
+    public boolean insert_key_local(int keyID, String key, String value, Result result,boolean insertHere,Integer replica) throws RemoteException {
        if(insertHere=false) {  
             boolean res = true;
-        //data_rwlock.readLock().unlock();
             data_rwlock.writeLock().lock();
      
             if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
@@ -1116,7 +1121,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             } else {
                 //HashMap<String, String> entry = data.computeIfAbsent(keyID, k -> new HashMap<>());
                 HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(keyID, k -> new HashMap<>());
-                Pair<Integer,String> pair = new Pair<>(replicaK, value);
+                Pair<Integer,String> pair = new Pair<>(0, value);
                 entry.put(key,pair);
             //entry.put(key, value);
 
@@ -1129,24 +1134,34 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             boolean res = true;
             data_rwlock.writeLock().lock();
             HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(keyID, k -> new HashMap<>());
-            Pair<Integer,String> pair = new Pair<>(replicaK, value);
+            Pair<Integer,String> pair = new Pair<>(replica, value);
             entry.put(key,pair);
             //entry.put(key, value);
-
+        try{
             data_rwlock.writeLock().unlock();
+            if (replica!=replication_Factor) {
+                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
+            }
+        } catch (Exception e) {
+            log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+            return false;
+        }
             log.info("Inserted key - " + key + " with value - " + value);
             return res;            
      }
     }
 
     @Override
-    public boolean delete_key_local(int keyID, String key, Result result) throws RemoteException {
-        boolean res = true;
-        //data_rwlock.writeLock().lock();
-        if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
-            //data_rwlock.writeLock().unlock();
-            res = delete_key(key, result);
-        } else {
+    public boolean delete_key_local(int keyID, String key, Result result,boolean deleteHere,Integer replica) throws RemoteException {
+        if(deleteHere=false) {  
+            boolean res = true;
+            data_rwlock.writeLock().lock();
+            if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
+            data_rwlock.writeLock().unlock();
+                res = delete_key(key, result);
+            } else 
+            {
             HashMap<String,Pair<Integer,String>> entry= data.get(keyID);
             //HashMap<String, String> entry = data.get(keyID);
             if (entry != null)
@@ -1156,9 +1171,34 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 } else {
                     res = false;
                 }
-           // data_rwlock.writeLock().unlock();
+            data_rwlock.writeLock().unlock();
+            }
+            return res;
         }
-        return res;
+        else {
+            try {
+                if (replica!=replication_Factor) {
+                    ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                    crep.delete_key_local(keyID, key, result,true,replica+1);
+                }
+            } catch (Exception e1) {
+                e1.printStackTrace();
+            }
+            boolean res = true;
+            data_rwlock.writeLock().lock();
+            HashMap<String,Pair<Integer,String>> entry= data.get(keyID);
+            //HashMap<String, String> entry = data.get(keyID);
+            if (entry != null)
+                if (entry.get(key) != null) {
+                    entry.remove(key);
+                    log.info("Deleted key - " + key);
+                } else {
+                    res = false;
+                }
+                 data_rwlock.writeLock().unlock();
+                 return res;
+        }
+
     }
 
     @Override
@@ -1168,7 +1208,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         
         //Pair<Integer,String> pair = new Pair<>();
         
-       // data_rwlock.readLock().lock();
+        data_rwlock.readLock().lock();
         
         HashMap <String,Pair<Integer,String>> entry= data.get(keyID);
         //HashMap<String, String> entry = data.get(keyID);
@@ -1179,7 +1219,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             //val = entry.get(key);
         }
 
-     //   data_rwlock.readLock().unlock();
+        data_rwlock.readLock().unlock();
         if (entry == null && !inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
             val = get_value(key, result);
         }
@@ -1208,7 +1248,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                    // c.insert_key_local(key, e.getKey(), e.getValue(), result);
                   // Pair <Integer,String> pair = e.getValue();
                    data_rwlock.writeLock().unlock();
-                   c.insert_key_local(key,e.getKey(),pair.getValue(),result,true);
+                   c.insert_key_local(key,e.getKey(),pair.getValue(),result,true,pair.getKey());
                     if (this.node.nodeID != this.get_successor().nodeID)
                         result.hopCount++;
                 
@@ -1267,7 +1307,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result) throws RemoteException {
         ArrayList<Integer> removelist = new ArrayList<>();
 
-        //data_rwlock.writeLock().lock();
+        data_rwlock.writeLock().lock();
         
         for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
         //for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
@@ -1278,7 +1318,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     try {
                         ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
                         Pair<Integer,String> pair = e.getValue();
-                        c.insert_key_local(key, e.getKey(), pair.getValue(), result,false);
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), result,false,pair.getKey());
                     } catch (Exception e1) {
                         e1.printStackTrace();
                     }
@@ -1289,7 +1329,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         for (Integer i : removelist) {
             data.remove(i);
         }
-       // data_rwlock.writeLock().unlock();
+        data_rwlock.writeLock().unlock();
     }
 
     @Override
