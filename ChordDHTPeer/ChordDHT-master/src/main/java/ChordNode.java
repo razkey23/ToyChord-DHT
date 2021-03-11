@@ -97,7 +97,7 @@ public interface ChordNode extends Remote {
      * @param result  Result object to assist in metrics collection
      * @throws RemoteException Due to RMI.
      */
-    void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result) throws RemoteException;
+    void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result,Integer replication_number) throws RemoteException;
 
     /**
      * This function notifes the other nodes that it might be their predecessor

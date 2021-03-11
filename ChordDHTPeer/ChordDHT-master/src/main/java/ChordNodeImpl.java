@@ -940,7 +940,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             log.info("Starting key migration");
             try {
                 c = (ChordNode) Naming.lookup("rmi://" + suc.ipaddress + "/ChordNode_" + suc.port);
-                //c.migrate_keys(this.predecessor, this.node, result);
+                c.migrate_keys(this.predecessor, this.node, result,0);
                 if (this.node.nodeID != suc.nodeID)
                     result.hopCount++;
             } catch (Exception e) {
@@ -1303,7 +1303,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         return Math.abs(hashValue.intValue()) % maxNodes;
     }
 
-    @Override
+   /* @Override
     public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result) throws RemoteException {
         ArrayList<Integer> removelist = new ArrayList<>();
 
@@ -1330,7 +1330,94 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             data.remove(i);
         }
         data_rwlock.writeLock().unlock();
+    } */
+
+    
+public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer replication_number) throws RemoteException {
+    ArrayList<Integer> removelist = new ArrayList<>();
+    data_rwlock.writeLock().lock();
+
+    if(replication_number == 0) {
+        for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
+            int key = hashkeys.getKey();
+            for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
+                Pair<Integer,String> pair = e.getValue();
+                HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(key, k -> new HashMap<>());
+                Integer current_replica = pair.getKey();
+                if(current_replica == replication_Factor){
+                    data_rwlock.writeLock().unlock();
+                    try {
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                    } catch (Exception e1) {
+                        e1.printStackTrace();
+                    }
+                    data_rwlock.writeLock().lock();
+                    data.remove(key);
+                }
+                else if (current_replica > replication_number) {
+                    Pair<Integer,String> newValues = new Pair<>(current_replica+1, pair.getValue());
+                    data_rwlock.writeLock().unlock();
+                    try {
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                    } catch (Exception e1) {
+                        e1.printStackTrace();
+                    }
+                    data_rwlock.writeLock().lock();
+                    entry.put(e.getKey(), newValues);
+
+                }
+                else if (current_replica == 0 && this.inCircularIntervalEndInclude(key, pred.nodeID, newNode.nodeID)) {
+                    Pair<Integer,String> newValues = new Pair<>(current_replica+1, pair.getValue());
+                    data_rwlock.writeLock().unlock();
+                    try {
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                    } catch (Exception e1) {
+                        e1.printStackTrace();
+                    }
+                    data_rwlock.writeLock().lock();
+                    entry.put(e.getKey(), newValues);
+
+                }
+            }
+        }
     }
+
+    else {
+        for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
+            int key = hashkeys.getKey();
+            HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(key, k -> new HashMap<>());
+            for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
+                Pair<Integer,String> pair = e.getValue();
+                Integer current_replica = pair.getKey();
+                if(current_replica == replication_Factor){
+                    data.remove(key);
+                }
+                else if (current_replica > replication_number) {
+                    Pair<Integer,String> newValues = new Pair<>(current_replica+1, pair.getValue());
+                    entry.put(e.getKey(), newValues);
+                }
+            }
+            //removelist.add(key);
+        }
+        /*for (Integer i : removelist) {
+            data.remove(i);
+        }*/
+    }
+    
+    data_rwlock.writeLock().unlock();
+    try {
+        ChordNode nextNode = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+        if(replication_number != replication_Factor) nextNode.migrate_keys(newNode, this.node, result, replication_number+1);
+    } catch (Exception e1) {
+        e1.printStackTrace();
+    }
+}
 
     @Override
     public void display_data_stored() throws RemoteException {
