@@ -253,4 +253,7 @@ public interface ChordNode extends Remote {
      * @throws RemoteException Due to RMI.
      */
     ArrayList<HashMap<String, Result>> getMetrics() throws RemoteException;
+
+    String getAllkeys(Integer term,String currentResult) throws RemoteException;
+    String display_data_stored_string(Integer id,String currentRes) throws RemoteException;
 }

@@ -215,6 +215,13 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     System.out.print("Enter key: ");
                     key = sc.nextLine();
                     Result getHops = new Result();
+                    if (key.equals("*")) {
+                        String output=new String();
+                        String empty="";
+                        output=cni.getAllkeys(cni.node.nodeID,empty);
+                        //System.out.println(output);
+                        //cni.getAllKeys(cni.node.nodeID);
+                    }
                     startTime = System.currentTimeMillis();
                     value = cni.get_value(key, getHops);
                     System.out.println(value != null ? "Value is: " + value : "Key not found.");
@@ -1047,9 +1054,11 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 log.info("Time taken for insert key operation: " + timetaken + "ms");
                 return flag;
             } else {
+                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                //boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
+                boolean flag=insert_key_local(keyID,key,value,result,true,0);
                 ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
-                boolean flag=insert_key_local(keyID,key,value,result,true,0);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
                 result.latency = timetaken;
@@ -1119,7 +1128,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
        if(insertHere=false) {  
             boolean res = true;
             data_rwlock.writeLock().lock();
-     
             if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
                 data_rwlock.writeLock().unlock();
                 res = insert_key(key, value, result);
@@ -1133,6 +1141,9 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 data_rwlock.writeLock().unlock();
                 log.info("Inserted key - " + key + " with value - " + value);
             }
+            System.out.print(this.node.nodeID);
+            System.out.print(" ");
+            System.out.println(System.nanoTime());
             return res;
             }
       else {
@@ -1153,6 +1164,10 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             return false;
         }
             log.info("Inserted key - " + key + " with value - " + value);
+            System.out.print(this.node.nodeID);
+            System.out.print(" ");
+            System.out.println(System.nanoTime());
+            //System.out.println(System.currentTimeMillis());
             return res;            
      }
     }
@@ -1203,7 +1218,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                  data_rwlock.writeLock().unlock();
                  return res;
         }
-
     }
 
     @Override
@@ -1295,6 +1309,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         }
         return true;
     }
+
 
     @Override
     public int generate_ID(String key, int maxNodes) throws RemoteException, NoSuchAlgorithmException {
@@ -1440,6 +1455,66 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
             }
         }
     }
+
+    
+
+    public String getAllkeys(Integer term,String currentResult) throws RemoteException {
+        /* I have to get the nodes and send them to my Successor */
+        data_rwlock.writeLock().lock();
+      
+        if (term!=this.node.nodeID || currentResult.isEmpty()==true){
+            String x= display_data_stored_string(this.node.nodeID, currentResult);
+        /*X has the String of the calling node ,need  to add it to current result and then send it to successor */
+            String newCurrentResult=currentResult+x;
+            System.out.println("Got here");
+            String useless=new String();
+            data_rwlock.writeLock().unlock();
+            try{
+                ChordNode crep=(ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                useless = crep.getAllkeys(term, newCurrentResult);
+            }
+            catch (Exception e1) {
+                e1.printStackTrace();
+            }
+            String empty="";
+            return empty;
+        }
+        else {
+            //String x= display_data_stored_string(this.node.nodeID, currentResult);
+        /*X has the String of the calling node ,need  to add it to current result and then send it to successor */
+            //String newCurrentResult=currentResult+x;
+            data_rwlock.writeLock().unlock();
+            //System.out.println("****");
+            System.out.println(currentResult);
+            return currentResult;
+        }
+    }
+
+    @Override
+    public  String display_data_stored_string(Integer id,String currentRes) throws RemoteException {
+        String start=new String("Node is "+this.node.nodeID+"\n");
+        String accum=new String();
+        String temp = new String();
+        String temp1= new String();
+        String temp2 = new String();
+        String temp3= new String();
+        for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
+       // for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
+            int key = hashkeys.getKey();
+            for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
+            //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
+                 temp= new String("Hash Key: " + key);
+                 temp1=new String ("\tActual Key: " + e.getKey());
+                Pair pair = e.getValue();
+                 temp2 = new String("\tReplica: " + pair.getKey());
+                 temp3 = new String("\tActual Value: " + pair.getValue());
+            }
+            accum+=temp+temp1+temp2+temp3+"\n";
+        }
+        return start+accum+"***************************\n";
+    } 
+    
+
 
     @Override
     public void makeCall(NodeInfo n) throws RemoteException {
