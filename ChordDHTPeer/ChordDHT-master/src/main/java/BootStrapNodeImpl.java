@@ -10,6 +10,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.rmi.registry.LocateRegistry;
+
+
 
 /**
  * This class serves as the starting point for the BootStrap server and
@@ -20,7 +23,9 @@ import java.util.*;
 public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapNode {
     private static final long serialVersionUID = 10L;
 
-    private static int m = 8;
+    private static String hostipaddress="127.0.0.1";
+    
+    private static int m = 10;
 
     /**
      * Maximum number of permitted nodes in the Chord Ring
@@ -51,9 +56,12 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
      * @throws RemoteException Due to RMI.
      */
     public static void main(String[] args) throws Exception {
+		System.setProperty("java.rmi.server.hostname",hostipaddress);
+		LocateRegistry.createRegistry(1099);
         try {
             BootStrapNodeImpl bnode = new BootStrapNodeImpl();
-            Naming.rebind("ChordRing", bnode);
+            Naming.rebind("rmi://"+hostipaddress+"/ChordRing",bnode);
+          
             noOfNodes = 0;
             System.out.println("Waiting for nodes to join or leave the Chord Ring");
             System.out.println("Number of nodes in Chord Ring: " + noOfNodes + "\n");
@@ -82,27 +90,45 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 int freeZoneCnt = 0;
                 for (i = 0; i < m; i++) {//For each zone in the ring
                     boolean isFilled = isZoneFilled(i);
+                    int c=0;
                     if (!isFilled) {//If zone is not completely filled, then generate a random ID in the corresponding zone range
                         freeZoneCnt++;
                         boolean repeat = true;
                         while (repeat) {
                             timeStamp = new SimpleDateFormat("MM-dd-yyyy HH:mm:ss.SSS").format(new Date());
+                            String temp = timeStamp.substring(16, timeStamp.length()-1);
+                            //System.out.println(temp);
+                            int k=i+1;
+                         
                             try {
-                                nodeID = generate_ID(ipaddress + port + timeStamp, maxNodes);
+                                nodeID = generate_ID(ipaddress + port + temp, maxNodes);
                             } catch (NoSuchAlgorithmException e) {
                                 e.printStackTrace();
                             }
-                            if (nodeID >= i * m && nodeID < (i + 1) * m && nodeIds.indexOf(nodeID) == -1 && randomIds.indexOf(nodeID) == -1) {
+                           int pivot=(int) Math.pow(2.0, (long) m)/10;
+                           int lowerbound=i*pivot;
+                           int upperbound=(i+1)*pivot;                           
+                           if (nodeID >= lowerbound && nodeID < upperbound && nodeIds.indexOf(nodeID) == -1 && randomIds.indexOf(nodeID) == -1) {
+                            //if (nodeID >= i * m && nodeID < (i + 1) * m && nodeIds.indexOf(nodeID) == -1 && randomIds.indexOf(nodeID) == -1) {
+                                System.out.println("Got Here" + nodeID);
                                 repeat = false;
                             }
+                            if(c==20) repeat=false;
+                            //System.out.println(nodeID);
+                
                         }
-                        randomIds.add(nodeID);
-                        copy.add(nodeID);
-                        Collections.sort(copy);
-                        succIds.add(nodeIds.get((nodeIds.indexOf(nodeID) + 1) % noOfNodes));
-                        copy.remove(Integer.valueOf(nodeID));
+                        if(c==20) continue;
+                        else {
+                            System.out.println("----");
+                            randomIds.add(nodeID);
+                            copy.add(nodeID);
+                            Collections.sort(copy);
+                            succIds.add(nodeIds.get((nodeIds.indexOf(nodeID) + 1) % noOfNodes));
+                            copy.remove(Integer.valueOf(nodeID));
+                        }
                     }
                 }
+        
                 //If only one zone was found to be free directly add to the nodeIds list
                 if (freeZoneCnt == 1) {
                     NodeInfo ni = new NodeInfo(ipaddress, port, nodeID);
@@ -119,7 +145,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                         long startTime = System.currentTimeMillis();
                         ChordNode c = null;
                         try {
-                            c = (ChordNode) Naming.lookup("rmi://" + ipaddress + "/ChordNode_" + port);
+                            c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+port);
                         } catch (NotBoundException | MalformedURLException e) {
                             e.printStackTrace();
                         }
@@ -131,6 +157,8 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                             minLatency = timetaken;
                         }
                     }
+                    int rnd = new Random().nextInt(randomIds.size());
+                    nodeID = randomIds.get(rnd);
                     NodeInfo ni = new NodeInfo(ipaddress, port, nodeID);
                     nodes.put(nodeID, ni);
                     nodeIds.add(nodeID);
@@ -217,6 +245,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         md.update((key).getBytes(StandardCharsets.UTF_8));
         byte[] hashBytes = md.digest();
         BigInteger hashValue = new BigInteger(1, hashBytes);
+        //return Math.abs(hashValue.intValue());
         return Math.abs(hashValue.intValue()) % maxNodes;
     }
 
@@ -231,11 +260,35 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         }
         return is_filled;
     }
-
     public ArrayList<Integer> getNodesTopology() throws RemoteException {
         ArrayList<Integer> res = new ArrayList<Integer>();
         res=nodeIds;
         Collections.sort(res);
         return res;
     }
+
+   /* @Override
+    public void insertToRing(int num, ChordNode node) throws RemoteException, NotBoundException, MalformedURLException{
+        Naming.rebind("ChordNode_" + num, node);
+    } */
+    public void insertToRing(int num, ChordNode node,String ipaddress) throws RuntimeException {
+        try {
+            Naming.rebind("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+num,node);
+        }
+        catch (Exception e1) {
+            System.out.println("Error In Binding ChordNode");
+        }
+    }
+    public void removeFromRing(String port,String ipaddress) throws RuntimeException {
+        try{
+            Naming.unbind("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+ port);
+        }
+        catch(Exception e1) {
+            System.out.println("Error In UnBinding ChordNode");
+        }
+    }   
+  /*  @Override
+    public void removeFromRing(String port) throws RemoteException, NotBoundException, MalformedURLException{
+        Naming.unbind("rmi://192.168.0.1/ChordNode_" + port);
+    } */
 }

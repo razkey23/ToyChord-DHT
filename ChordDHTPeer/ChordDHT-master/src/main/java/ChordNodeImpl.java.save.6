@@ -1,4 +1,6 @@
 
+
+
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.Level;
@@ -54,7 +56,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     private static Timer timerStabilize = new Timer();
     private static Timer timerFixFinger = new Timer();
     private static Logger log = null;
-    private static String hostipaddress="127.0.0.1";
+
     /**
      * Data store for each Chord Node instance
      */
@@ -129,16 +131,17 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         log.info("\n## Creating chord node instance ##\n");
 
         String nodeIPAddress = args[0];
-	    String hosturl="rmi://"+hostipaddress+"/";
+	String hosturl="rmi://192.168.0.1/";
 	
         try {
             startTime = System.currentTimeMillis();
             result.latency = startTime;
             //String rmiUrl = "rmi://" + args[1] + "/ChordRing";
-	    String rmiUrl="rmi://"+hostipaddress+"/ChordRing";
+	    String rmiUrl="rmi://192.168.0.1/ChordRing";
             log.debug("Contacting Bootstrap Server " + rmiUrl);
 	  //  theRegistry = LocateRegistry.getRegistry("rmi://192.168.0.1");
             bootstrap = (BootStrapNode) Naming.lookup(rmiUrl);
+	    bootstrap
         } catch (MalformedURLException | RemoteException | NotBoundException e) {
             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
         }
@@ -147,15 +150,14 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             while (true) {
                 log.trace("Checking for existing chord node instances [ChordNode_" + num + "] running on localhost");
                 try {
-                    c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+nodeIPAddress+"_"+num);
+                    c = (ChordNode) Naming.lookup("rmi://192.168.0.1/ChordNode_" + num);
                 } catch (Exception e) {
                     c = null;
                 }
                 if (c == null) {
-		    Registry theRegistry = LocateRegistry.getRegistry("rmi://"+hostipaddress+"",1099);
+		    Registry theRegistry = LocateRegistry.getRegistry("rmi://192.168.0.1",1099);
                     cni = new ChordNodeImpl();
-		            System.out.println("CrashedHere");
-                    bootstrap.insertToRing(num, cni,nodeIPAddress);
+		   System.out.println("CrashedHere");
                    //Naming.bind("rmi://192.168.0.1/ChordNode_" + num, cni);
                     break;
                 } else {
@@ -532,8 +534,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                         System.out.println("Node left...No more operations allowed");
 
                         try {
-                            bootstrap.removeFromRing(cni.node.port,nodeIPAddress);
-                            //Naming.unbind("rmi://localhost/ChordNode_" + cni.node.port);
+                            Naming.unbind("rmi://localhost/ChordNode_" + cni.node.port);
                             log.debug("ChordNode RMI object unbinded");
                             System.out.println("Node removed from RMI registry!");
                         } catch (Exception e) {
@@ -616,8 +617,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         log.debug("Searching for the successor of id: " + id);
         NodeInfo newNode = find_predecessor(id, result);
         try {
-            ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-            //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+            ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
             if (newNode.nodeID != this.node.nodeID) {
                 result.hopCount++;
             }
@@ -652,8 +652,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 }
 
                 myID = nn.nodeID;
-                c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+nn.ipaddress+"_"+nn.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + nn.ipaddress + "/ChordNode_" + nn.port);
+                c = (ChordNode) Naming.lookup("rmi://" + nn.ipaddress + "/ChordNode_" + nn.port);
                 succID = c.get_successor().nodeID;
                 if (nn.nodeID != this.node.nodeID) {
                     result.hopCount++;
@@ -692,8 +691,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     public void init_finger_table(NodeInfo n, Result result) throws RemoteException {
         ChordNode c;
         try {
-             c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-            //c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
+            c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
 
             int myID = this.node.nodeID;
             for (int i = 0; i < fingerTableSize - 1; i++) {
@@ -744,8 +742,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             }
             NodeInfo p = find_predecessor(id, result);
             try {
-                ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+p.ipaddress+"_"+p.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
+                ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
                 c.update_finger_table_leave(this.node, i - 1, this.get_successor(), result);
                 if (this.node.nodeID != p.nodeID)
                     result.hopCount++;
@@ -761,8 +758,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             NodeInfo p = predecessor;
 
             try {
-                ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+p.ipaddress+"_"+p.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
+                ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
                 c.update_finger_table_leave(t, i, s, result);
                 if (this.node.nodeID != p.nodeID)
                     result.hopCount++;
@@ -792,16 +788,14 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 successor = this;
             } else {
                 log.debug("RMI CALL TO HEART BEAT:" + "rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
-                successor = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+successorNodeInfo.ipaddress+"_"+successorNodeInfo.port);
-                //successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
+                successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
                 successor.send_beat();
             }
         } catch (Exception e) {
             log.error("Failed Heart beat message. Error in stabilize: " + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             try {
                 assert successorNodeInfo != null;
-                successor = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+successorNodeInfo.ipaddress+"_"+successorNodeInfo.port);
-                //successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
+                successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
                 successor.send_beat();
             } catch (Exception e1) {
                 successor = null;
@@ -823,8 +817,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 while (true) {// follow the predecessor chain from tempNodeInfo
                     try {
                         log.debug("Current node in predecessor chain " + tempNodeInfo.nodeID);
-                        temp = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+tempNodeInfo.ipaddress+"_"+tempNodeInfo.port);
-                        //temp = (ChordNode) Naming.lookup("rmi://" + tempNodeInfo.ipaddress + "/ChordNode_" + tempNodeInfo.port);
+                        temp = (ChordNode) Naming.lookup("rmi://" + tempNodeInfo.ipaddress + "/ChordNode_" + tempNodeInfo.port);
                         if (temp.get_predecessor().nodeID == successorNodeInfo.nodeID) {
                             temp.set_predecessor(this.node);
                             this.set_successor(tempNodeInfo);
@@ -847,8 +840,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 try {// My finger table does not include a different node. Request from bootstrap for a new successor.
                     NodeInfo new_suc = bootstrap.findNewSuccessor(this.node, successorNodeInfo);
                     this.set_successor(new_suc);
-                    temp = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+new_suc.ipaddress+"_"+new_suc.port);
-                    //temp = (ChordNode) Naming.lookup("rmi://" + new_suc.ipaddress + "/ChordNode_" + new_suc.port);
+                    temp = (ChordNode) Naming.lookup("rmi://" + new_suc.ipaddress + "/ChordNode_" + new_suc.port);
                     temp.set_predecessor(this.node);
                 } catch (Exception e) {
                     log.error("Error in requesting new successor from bootstrap: " + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -969,8 +961,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
             log.info("Starting key migration");
             try {
-                c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+suc.ipaddress+"_"+suc.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + suc.ipaddress + "/ChordNode_" + suc.port);
+                c = (ChordNode) Naming.lookup("rmi://" + suc.ipaddress + "/ChordNode_" + suc.port);
                 c.migrate_keys(this.predecessor, this.node, result,0);
                 if (this.node.nodeID != suc.nodeID)
                     result.hopCount++;
@@ -979,8 +970,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             }
 
             try {// set successor of predecessor as me
-                c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+predecessor.ipaddress+"_"+predecessor.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + predecessor.ipaddress + "/ChordNode_" + predecessor.port);
+                c = (ChordNode) Naming.lookup("rmi://" + predecessor.ipaddress + "/ChordNode_" + predecessor.port);
                 c.set_successor(this.node);
                 log.info("successor of node " + predecessor.nodeID + " set as " + this.node.nodeID);
 
@@ -1064,8 +1054,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             log.info("Inserting keyID " + keyID + " for key " + key + " with value " + value);
             NodeInfo n = find_successor(keyID, result);
             if (n != this.node) {
-                ChordNode c= c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-               //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
+                ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
                 boolean flag = c.insert_key_local(keyID, key, value, result,false,0);
                 endTime = System.currentTimeMillis();
@@ -1078,8 +1067,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 //boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
                 boolean flag=insert_key_local(keyID,key,value,result,true,0);
-                ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
@@ -1105,8 +1093,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             log.info("Deleting key :" + key + "with key hash" + keyID);
             NodeInfo n = find_successor(keyID, result);
             if (n != this.node) {
-                ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
+                ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
                 return c.delete_key_local(keyID, key, result,false,0);
             } else {
@@ -1126,8 +1113,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             int keyID = generate_ID(key, maxNodes);
             NodeInfo n = find_successor(keyID, result);
             if (n != this.node) {
-                ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
+                ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
                 String val = c.get_key_local(keyID, key, result);
                 endTime = System.currentTimeMillis();
@@ -1180,8 +1166,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         try{
             data_rwlock.writeLock().unlock();
             if (replica!=replication_Factor) {
-                ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
             }
         } catch (Exception e) {
@@ -1223,8 +1208,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         else {
             try {
                 if (replica!=replication_Factor) {
-                    ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                    //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                    ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                     crep.delete_key_local(keyID, key, result,true,replica+1);
                 }
             } catch (Exception e1) {
@@ -1278,8 +1262,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         data_rwlock.writeLock().lock();
         System.out.print("I am here INSIDE");
         try {
-            c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-           // c = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+            c = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
             for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
                 System.out.println("CHECK");
             //for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
@@ -1321,8 +1304,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             c.set_predecessor(this.get_predecessor());
 
             //Set predecessor's successor to my successor
-            c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.predecessor.ipaddress+"_"+this.predecessor.port);
-            //c = (ChordNode) Naming.lookup("rmi://" + this.predecessor.ipaddress + "/ChordNode_" + this.predecessor.port);
+            c = (ChordNode) Naming.lookup("rmi://" + this.predecessor.ipaddress + "/ChordNode_" + this.predecessor.port);
             if (this.node.nodeID != this.get_successor().nodeID) {
                 result.hopCount++;
             }
@@ -1395,8 +1377,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                 if(current_replica == replication_Factor){
                     data_rwlock.writeLock().unlock();
                     try {
-                        ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
                         
                         c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
                     } catch (Exception e1) {
@@ -1409,8 +1390,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     Pair<Integer,String> newValues = new Pair<>(current_replica+1, pair.getValue());
                     data_rwlock.writeLock().unlock();
                     try {
-                        ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
                         
                         c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
                     } catch (Exception e1) {
@@ -1424,8 +1404,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     Pair<Integer,String> newValues = new Pair<>(current_replica+1, pair.getValue());
                     data_rwlock.writeLock().unlock();
                     try {
-                        ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
+                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
                         
                         c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
                     } catch (Exception e1) {
@@ -1463,8 +1442,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
     
     data_rwlock.writeLock().unlock();
     try {
-        ChordNode nextNode = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-        //ChordNode nextNode = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+        ChordNode nextNode = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
         if(replication_number != replication_Factor) nextNode.migrate_keys(newNode, this.node, result, replication_number+1);
     } catch (Exception e1) {
         e1.printStackTrace();
@@ -1502,8 +1480,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
             String useless=new String();
             data_rwlock.writeLock().unlock();
             try{
-                ChordNode crep = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep=(ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
+                ChordNode crep=(ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 useless = crep.getAllkeys(term, newCurrentResult);
             }
             catch (Exception e1) {
@@ -1554,8 +1531,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
         if (n != null) {
             ChordNode c;
             try {
-                c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
+                c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 c.send_beat();
             } catch (Exception e) {
 

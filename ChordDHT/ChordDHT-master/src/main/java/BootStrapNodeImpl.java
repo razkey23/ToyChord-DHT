@@ -1,4 +1,3 @@
-
 import java.math.BigInteger;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +9,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.rmi.registry.LocateRegistry;
+
+
 
 /**
  * This class serves as the starting point for the BootStrap server and
@@ -20,6 +22,8 @@ import java.util.*;
 public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapNode {
     private static final long serialVersionUID = 10L;
 
+    private static String hostipaddress="127.0.0.1";
+    
     private static int m = 10;
 
     /**
@@ -51,9 +55,12 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
      * @throws RemoteException Due to RMI.
      */
     public static void main(String[] args) throws Exception {
+		System.setProperty("java.rmi.server.hostname",hostipaddress);
+		LocateRegistry.createRegistry(1099);
         try {
             BootStrapNodeImpl bnode = new BootStrapNodeImpl();
-            Naming.rebind("ChordRing", bnode);
+	        Naming.rebind("rmi://"+hostipaddress+"/ChordRing",bnode);
+          
             noOfNodes = 0;
             System.out.println("Waiting for nodes to join or leave the Chord Ring");
             System.out.println("Number of nodes in Chord Ring: " + noOfNodes + "\n");
@@ -137,7 +144,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                         long startTime = System.currentTimeMillis();
                         ChordNode c = null;
                         try {
-                            c = (ChordNode) Naming.lookup("rmi://" + ipaddress + "/ChordNode_" + port);
+                            c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+port);
                         } catch (NotBoundException | MalformedURLException e) {
                             e.printStackTrace();
                         }
@@ -258,4 +265,29 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         Collections.sort(res);
         return res;
     }
+
+   /* @Override
+    public void insertToRing(int num, ChordNode node) throws RemoteException, NotBoundException, MalformedURLException{
+        Naming.rebind("ChordNode_" + num, node);
+    } */
+    public void insertToRing(int num, ChordNode node,String ipaddress) throws RuntimeException {
+        try {
+            Naming.rebind("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+num,node);
+        }
+        catch (Exception e1) {
+            System.out.println("Error In Binding ChordNode");
+        }
+    }
+    public void removeFromRing(String port,String ipaddress) throws RuntimeException {
+        try{
+            Naming.unbind("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+ port);
+        }
+        catch(Exception e1) {
+            System.out.println("Error In UnBinding ChordNode");
+        }
+    }   
+  /*  @Override
+    public void removeFromRing(String port) throws RemoteException, NotBoundException, MalformedURLException{
+        Naming.unbind("rmi://192.168.0.1/ChordNode_" + port);
+    } */
 }

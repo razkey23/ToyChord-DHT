@@ -97,7 +97,7 @@ public interface ChordNode extends Remote {
      * @param result  Result object to assist in metrics collection
      * @throws RemoteException Due to RMI.
      */
-    void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result) throws RemoteException;
+    void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result,Integer replication_number) throws RemoteException;
 
     /**
      * This function notifes the other nodes that it might be their predecessor
@@ -208,7 +208,7 @@ public interface ChordNode extends Remote {
      * @return boolean Indicator to check if operation was successful or not
      * @throws RemoteException Due to RMI.
      */
-    boolean insert_key_local(int keyID, String key, String value, Result result) throws RemoteException;
+    boolean insert_key_local(int keyID, String key, String value, Result result,boolean insertHere,Integer replica) throws RemoteException;
 
     /**
      * Function to delete key value pair in current Chord Node instance
@@ -222,7 +222,7 @@ public interface ChordNode extends Remote {
      * @return boolean Indicator to check if operation was successful or not
      * @throws RemoteException Due to RMI.
      */
-    boolean delete_key_local(int keyID, String key, Result result) throws RemoteException;
+    boolean delete_key_local(int keyID, String key, Result result,boolean deleteHere,Integer replica) throws RemoteException;
 
     /**
      * Function to relieve key value pair in current Chord Node instance
@@ -253,5 +253,7 @@ public interface ChordNode extends Remote {
      * @throws RemoteException Due to RMI.
      */
     ArrayList<HashMap<String, Result>> getMetrics() throws RemoteException;
-    
+
+    String getAllkeys(Integer term,String currentResult) throws RemoteException;
+    String display_data_stored_string(Integer id,String currentRes) throws RemoteException;
 }

@@ -3,13 +3,16 @@ import java.rmi.RemoteException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.rmi.NotBoundException;
 
 /**
  * Defines the operations of the {@link BootStrapNodeImpl} such as joins and departures.
  */
 public interface BootStrapNode extends Remote {
-
-    /**
+    void insertToRing(int num, ChordNode node,String ipaddress) throws RemoteException;
+   
+    void removeFromRing(String port,String ipaddress) throws RemoteException, NotBoundException;
+     /**
      * This function will be called by any Chord Node that wishes to join the network. The main objective of this
      * function is to assign a unique identifier to a new Chord Node and add it the the ring. Other than this it also
      * implements the two different methods on how to be assigned identifiers based on network proximity.
