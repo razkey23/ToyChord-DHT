@@ -32,7 +32,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
      * Number of identifier bits.
      */
     private static int replication_Factor=2;
-    private static int m = 10;
+    private static int m = 11;
 
     /**
      * //Slices of each image (see demo part).
@@ -200,7 +200,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         while (running) {
             System.out.println("\nMenu: \n1. Print Finger Table"
-                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring\n10. Overlay");
+                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring\n10. Overlay\n11. Insert Elements");
             System.out.println("Enter your choice: ");
             try {
                 choice = sc.nextInt();
@@ -552,6 +552,19 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     ArrayList<Integer> topology = new ArrayList<>();
                     topology=bootstrap.getNodesTopology();
                     System.out.println(topology);
+                    break;
+                case 11:
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeInsert();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                    
                     break;
                 default:
                     break;
@@ -1193,14 +1206,13 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             Pair<Integer,String> pair = new Pair<>(replica, value);
             entry.put(key,pair);
             //entry.put(key, value);
-        try{
             data_rwlock.writeLock().unlock();
             if (replica!=replication_Factor) {
                 NodeInfo succ_node = this.get_successor();
                 new Thread(new Runnable() {
                     public void run() {
                         try {
-                            ChordNode crep = (ChordNode) Naming.lookup("rmi://" + succ_node.ipaddress + "/ChordNode_" + succ_node.port);
+                            ChordNode crep = (ChordNode) Naming.lookup("rmi://" + hostipaddress + "/ChordNode_" + succ_node.ipaddress + "_" + succ_node.port);
                             boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
                         } catch (Exception e) {
                             log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -1208,10 +1220,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     }
                 }).start();
             }
-        } catch (Exception e) {
-            log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
-            return false;
-        }
             log.info("Inserted key - " + key + " with value - " + value);
             System.out.print(this.node.nodeID);
             System.out.print(" ");
@@ -1245,22 +1253,18 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             return res;
         }
         else {
-            try {
-                if (replica!=replication_Factor) {
-                    NodeInfo succ_node = this.get_successor();
-                    new Thread(new Runnable() {
-                        public void run() {
-                            try {
-                                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + succ_node.ipaddress + "/ChordNode_" + succ_node.port);
-                                crep.delete_key_local(keyID, key, result,true,replica+1);
-                            } catch (Exception e) {
-                                log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
-                            }
+            if (replica!=replication_Factor) {
+                NodeInfo succ_node = this.get_successor();
+                new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            ChordNode crep = (ChordNode) Naming.lookup("rmi://" + hostipaddress + "/ChordNode_" + succ_node.ipaddress + "_" + succ_node.port);
+                            crep.delete_key_local(keyID, key, result,true,replica+1);
+                        } catch (Exception e) {
+                            log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
                         }
-                    }).start();
-                }
-            } catch (Exception e1) {
-                e1.printStackTrace();
+                    }
+                }).start();
             }
             boolean res = true;
             data_rwlock.writeLock().lock();
@@ -1280,7 +1284,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
     @Override
     public String get_key_local(int keyID, String key, Result result) throws RemoteException {
-
         String val = null;
         
         //Pair<Integer,String> pair = new Pair<>();
@@ -1294,6 +1297,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             //pair = entry.get(key);
             val = pair.getValue();
             //val = entry.get(key);
+            System.out.println("I have the value2");
         }
 
         data_rwlock.readLock().unlock();

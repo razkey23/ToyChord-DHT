@@ -10,6 +10,9 @@ import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.rmi.registry.LocateRegistry;
+import java.io.File;  
+import java.io.FileNotFoundException; 
+import java.util.Scanner; 
 
 
 
@@ -24,7 +27,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
 
     private static String hostipaddress="127.0.0.1";
     
-    private static int m = 10;
+    private static int m = 11;
 
     /**
      * Maximum number of permitted nodes in the Chord Ring
@@ -287,16 +290,78 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         }
     }  
 
-    public void executeInsert () {
+    public void executeInsert () throws RemoteException{
+        //int i = 0;
+        System.out.println("hello");
+        Random r = new Random();
         try {
             File myObj = new File("../../../../transactions/insert.txt");
-            /*Scanner myReader = new Scanner(myObj);
+            Scanner myReader = new Scanner(myObj);
             while (myReader.hasNextLine()) {
-                String data = myReader.nextLine();
-                System.out.println(data);
-            }*/
+                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
+                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                //if (i == 10) break;
+                Result insHops = new Result();
+                //i++;
+                String[] data = myReader.nextLine().split(", ");
+                ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                c.insert_key(data[0], data[1], insHops);
+            }
+            System.out.println("finished");
             myReader.close();
-        } catch (FileNotFoundException e) {
+        } catch (Exception e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        }
+    }
+    public void executeQuery () throws RemoteException{
+        //int i = 0;
+        System.out.println("hello");
+        Random r = new Random();
+        try {
+            File myObj = new File("../../../../transactions/query.txt");
+            Scanner myReader = new Scanner(myObj);
+            while (myReader.hasNextLine()) {
+                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
+                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                //if (i == 10) break;
+                Result getHops = new Result();
+                //i++;
+                String data = myReader.nextLine();
+                ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                c.get_value(data, getHops);
+            }
+            System.out.println("finished");
+            myReader.close();
+        } catch (Exception e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        }
+    }
+
+    public void executeCombo() throws RemoteException{
+        //int i = 0;
+        System.out.println("hello");
+        Random r = new Random();
+        try {
+            File myObj = new File("../../../../transactions/requests.txt");
+            Scanner myReader = new Scanner(myObj);
+            while (myReader.hasNextLine()) {
+                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
+                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                //if (i == 10) break;
+                Result result = new Result();
+                //i++;
+                String[] data = myReader.nextLine().split(", ");
+                ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                if (data[0].equals("insert")) c.insert_key(data[1], data[2], result);
+                else if (data[0].equals("query")) c.get_value(data[1], result);
+                else System.out.println("Error In request");
+                    
+            }
+            System.out.println("finished");
+            myReader.close();
+        } catch (Exception e) {
             System.out.println("An error occurred.");
             e.printStackTrace();
         }

@@ -86,5 +86,8 @@ public interface BootStrapNode extends Remote {
      */
     NodeInfo findNewSuccessor(NodeInfo n, NodeInfo dead_node) throws RemoteException;
     ArrayList<Integer> getNodesTopology() throws RemoteException; 
-    
+    void executeInsert() throws RemoteException;
+    void executeQuery() throws RemoteException;
+    void executeCombo() throws RemoteException;
+
 }

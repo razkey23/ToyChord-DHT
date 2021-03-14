@@ -32,7 +32,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
      * Number of identifier bits.
      */
     private static int replication_Factor=2;
-    private static int m = 10;
+    private static int m = 11;
 
     /**
      * //Slices of each image (see demo part).
@@ -200,7 +200,8 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         while (running) {
             System.out.println("\nMenu: \n1. Print Finger Table"
-                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring\n10. Overlay");
+                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n"
+                    +"8. Experiments \n9. Leave Chord Ring\n10. Overlay\n11. Insert Elements\n12. Search Elements\n13. Execute Requests");
             System.out.println("Enter your choice: ");
             try {
                 choice = sc.nextInt();
@@ -552,6 +553,45 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     ArrayList<Integer> topology = new ArrayList<>();
                     topology=bootstrap.getNodesTopology();
                     System.out.println(topology);
+                    break;
+                case 11:
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeInsert();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                    
+                    break;
+                case 12:
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeQuery();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                    
+                    break;
+                    case 13:
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeCombo();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                    
                     break;
                 default:
                     break;
@@ -1554,20 +1594,22 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
         String temp1= new String();
         String temp2 = new String();
         String temp3= new String();
+        int i = 0;
         for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
        // for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
             int key = hashkeys.getKey();
             for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
             //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
-                 temp= new String("Hash Key: " + key);
-                 temp1=new String ("\tActual Key: " + e.getKey());
+                i ++;
+                temp= new String("Hash Key: " + key);
+                temp1=new String ("\tActual Key: " + e.getKey());
                 Pair pair = e.getValue();
-                 temp2 = new String("\tReplica: " + pair.getKey());
-                 temp3 = new String("\tActual Value: " + pair.getValue());
+                temp2 = new String("\tReplica: " + pair.getKey());
+                temp3 = new String("\tActual Value: " + pair.getValue());
             }
             accum+=temp+temp1+temp2+temp3+"\n";
         }
-        return start+accum+"***************************\n";
+        return start+accum+String.valueOf(i)+"***************************\n" ;
     } 
     
 
