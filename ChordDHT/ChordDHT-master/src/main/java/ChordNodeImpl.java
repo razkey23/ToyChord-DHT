@@ -1,6 +1,3 @@
-
-
-
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.Level;
@@ -1123,21 +1120,38 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     @Override
     public String get_value(String key, Result result) {
         try {
+            int keyID = generate_ID(key, maxNodes);
+            String val = null;
+            data_rwlock.readLock().lock();
+            System.out.println("I started");
+            HashMap <String,Pair<Integer,String>> entry= data.get(keyID);
+            //HashMap<String, String> entry = data.get(keyID);
+            if (entry != null) {
+                Pair<Integer,String> pair = entry.get(key);
+                //pair = entry.get(key);
+                val = pair.getValue();
+                //val = entry.get(key);
+            }
+            data_rwlock.readLock().unlock();
+            if (entry != null) {
+                System.out.println("I have the value");
+                return val;
+            }
             long endTime, startTime, timetaken;
             startTime = System.currentTimeMillis();
-            int keyID = generate_ID(key, maxNodes);
+            //int keyID = generate_ID(key, maxNodes);
             NodeInfo n = find_successor(keyID, result);
             if (n != this.node) {
                 ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
                 //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
                 result.hopCount++;
-                String val = c.get_key_local(keyID, key, result);
+                val = c.get_key_local(keyID, key, result);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
                 log.info("Time taken for query key operation: " + timetaken + "ms");
                 return val;
             } else {
-                String val = get_key_local(keyID, key, result);
+                val = get_key_local(keyID, key, result);
                 endTime = System.currentTimeMillis();
                 timetaken = endTime - startTime;
                 log.info("Time taken for query key operation: " + timetaken + "ms");
@@ -1182,9 +1196,17 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         try{
             data_rwlock.writeLock().unlock();
             if (replica!=replication_Factor) {
-                ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
+                NodeInfo succ_node = this.get_successor();
+                new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            ChordNode crep = (ChordNode) Naming.lookup("rmi://" + succ_node.ipaddress + "/ChordNode_" + succ_node.port);
+                            boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
+                        } catch (Exception e) {
+                            log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                        }
+                    }
+                }).start();
             }
         } catch (Exception e) {
             log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -1225,9 +1247,17 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         else {
             try {
                 if (replica!=replication_Factor) {
-                    ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                    //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                    crep.delete_key_local(keyID, key, result,true,replica+1);
+                    NodeInfo succ_node = this.get_successor();
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + succ_node.ipaddress + "/ChordNode_" + succ_node.port);
+                                crep.delete_key_local(keyID, key, result,true,replica+1);
+                            } catch (Exception e) {
+                                log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
                 }
             } catch (Exception e1) {
                 e1.printStackTrace();

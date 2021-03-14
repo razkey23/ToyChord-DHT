@@ -285,9 +285,20 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         catch(Exception e1) {
             System.out.println("Error In UnBinding ChordNode");
         }
-    }   
-  /*  @Override
-    public void removeFromRing(String port) throws RemoteException, NotBoundException, MalformedURLException{
-        Naming.unbind("rmi://192.168.0.1/ChordNode_" + port);
-    } */
+    }  
+
+    public void executeInsert () {
+        try {
+            File myObj = new File("../../../../transactions/insert.txt");
+            /*Scanner myReader = new Scanner(myObj);
+            while (myReader.hasNextLine()) {
+                String data = myReader.nextLine();
+                System.out.println(data);
+            }*/
+            myReader.close();
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        }
+    }
 }
