@@ -15,7 +15,7 @@ public class Temp {
                 
                     System.out.print(data[0]);
                     System.out.print("    hi"+ data[1]);
-                System.out.println();
+                //System.out.println();
             }
             myReader.close();
         } catch (FileNotFoundException e) {

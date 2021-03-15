@@ -13,6 +13,10 @@ import java.rmi.registry.LocateRegistry;
 import java.io.File;  
 import java.io.FileNotFoundException; 
 import java.util.Scanner; 
+import org.apache.log4j.FileAppender;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
 
 
 
@@ -26,7 +30,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
     private static final long serialVersionUID = 10L;
 
     private static String hostipaddress="127.0.0.1";
-    
+    private static Logger log = null;
     private static int m = 11;
 
     /**
@@ -58,6 +62,24 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
      * @throws RemoteException Due to RMI.
      */
     public static void main(String[] args) throws Exception {
+        PatternLayout layout = new PatternLayout();
+        String conversionPattern = "%-7p %d [%t] %c %x - %m%n";
+        layout.setConversionPattern(conversionPattern);
+
+        // creates file appender
+        FileAppender fileAppender = new FileAppender();
+
+        fileAppender.setFile("logs/bootstrap.log");
+        fileAppender.setLayout(layout);
+        fileAppender.activateOptions();
+
+        //logger assign
+        log = Logger.getLogger(BootStrapNodeImpl.class);
+        log.addAppender(fileAppender);
+        log.setLevel(Level.DEBUG);
+
+        log.info("\n## Creating bootstrap node instance ##\n");
+
 		System.setProperty("java.rmi.server.hostname",hostipaddress);
 		LocateRegistry.createRegistry(1099);
         try {
@@ -269,10 +291,6 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         return res;
     }
 
-   /* @Override
-    public void insertToRing(int num, ChordNode node) throws RemoteException, NotBoundException, MalformedURLException{
-        Naming.rebind("ChordNode_" + num, node);
-    } */
     public void insertToRing(int num, ChordNode node,String ipaddress) throws RuntimeException {
         try {
             Naming.rebind("rmi://"+hostipaddress+"/ChordNode_"+ipaddress+"_"+num,node);
@@ -292,6 +310,7 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
 
     public void executeInsert () throws RemoteException{
         //int i = 0;
+        log.info("Starting executing inserfts from insert.txt file\n");
         System.out.println("hello");
         Random r = new Random();
         try {
@@ -305,7 +324,11 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 //i++;
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
+                long startTime = System.currentTimeMillis();
                 c.insert_key(data[0], data[1], insHops);
+                long endTime = System.currentTimeMillis();
+                long timetaken = endTime - startTime;
+                log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms" );
             }
             System.out.println("finished");
             myReader.close();
@@ -329,7 +352,11 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 //i++;
                 String data = myReader.nextLine();
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                c.get_value(data, getHops);
+                long startTime = System.currentTimeMillis();
+                String value = c.get_value(data, getHops);
+                long endTime = System.currentTimeMillis();
+                long timetaken = endTime - startTime;
+                log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms and resulted in value: " + value);
             }
             System.out.println("finished");
             myReader.close();
@@ -354,8 +381,19 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 //i++;
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                if (data[0].equals("insert")) c.insert_key(data[1], data[2], result);
-                else if (data[0].equals("query")) c.get_value(data[1], result);
+                long startTime = System.currentTimeMillis(), endTime, timetaken;
+                if (data[0].equals("insert")) {
+                    c.insert_key(data[1], data[2], result);
+                    endTime = System.currentTimeMillis();
+                    timetaken = endTime - startTime;
+                    log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms" );
+                }
+                else if (data[0].equals("query")) {
+                    String value = c.get_value(data[1], result);
+                    endTime = System.currentTimeMillis();
+                    timetaken = endTime - startTime;
+                    log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms and resulted in value: " + value);
+                }
                 else System.out.println("Error In request");
                     
             }
