@@ -318,16 +318,15 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 int number = r.nextInt(noOfNodes);
                 NodeInfo cn = nodeList.get(number);
                 //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                Result insHops = new Result();
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 long startTime = System.nanoTime();
-                c.insert_key(data[0], data[1], insHops);
+                c.insert_key(data[0], data[1]);
                 long endTime = System.nanoTime();
                 long timetaken = endTime - startTime;
-                log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms" );
+                log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ns" );
             }
-            System.out.println("finished");
+            System.out.println("Finished inserting keys-values");
             myReader.close();
         } catch (Exception e) {
             System.out.println("An error occurred.");
@@ -343,17 +342,16 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
             while (myReader.hasNextLine()) {
                 int number = r.nextInt(noOfNodes);
                 NodeInfo cn = nodeList.get(number);
-                //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                Result getHops = new Result();
                 String data = myReader.nextLine();
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 long startTime = System.nanoTime();
-                String value = c.get_value(data, getHops);
+                String value = c.get_value(data);
                 long endTime = System.nanoTime();
                 long timetaken = endTime - startTime;
-                log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port+ " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms and resulted in value: " + value);
+                log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port+ " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ns and resulted in value: " + value);
             }
             myReader.close();
+            System.out.println("Finished searching keys");
         } catch (Exception e) {
             System.out.println("An error occurred.");
             e.printStackTrace();
@@ -370,26 +368,25 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
                 int number = r.nextInt(noOfNodes);
                 NodeInfo cn = nodeList.get(number);
                 //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                Result result = new Result();
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 long startTime = System.nanoTime(), endTime, timetaken;
                 if (data[0].equals("insert")) {
-                    c.insert_key(data[1], data[2], result);
+                    c.insert_key(data[1], data[2]);
                     endTime = System.nanoTime();
                     timetaken = endTime - startTime;
-                    log.info("Time taken to insert: `" + data[1] + "` with value: " + data[2] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms" );
+                    log.info("Time taken to insert: `" + data[1] + "` with value: " + data[2] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ns" );
                 }
                 else if (data[0].equals("query")) {
-                    String value = c.get_value(data[1], result);
+                    String value = c.get_value(data[1]);
                     endTime = System.nanoTime();
                     timetaken = endTime - startTime;
-                    log.info("Time taken for query of: `" + data[1] + "` starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms and resulted in value: " + value);
+                    log.info("Time taken for query of: `" + data[1] + "` starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ns and resulted in value: " + value);
                 }
                 else log.info("Error In request");
-                    
             }
             myReader.close();
+            System.out.println("Finished all queries");
         } catch (Exception e) {
             System.out.println("An error occurred.");
             e.printStackTrace();

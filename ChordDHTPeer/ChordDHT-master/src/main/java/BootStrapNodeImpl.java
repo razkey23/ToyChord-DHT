@@ -309,26 +309,22 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
     }  
 
     public void executeInsert () throws RemoteException{
-        //int i = 0;
-        log.info("Starting executing inserfts from insert.txt file\n");
-        System.out.println("hello");
+        log.info("Starting executing inserts from insert.txt file");
         Random r = new Random();
         try {
             File myObj = new File("../../../../transactions/insert.txt");
             Scanner myReader = new Scanner(myObj);
             while (myReader.hasNextLine()) {
-                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
-                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                //if (i == 10) break;
-                Result insHops = new Result();
-                //i++;
+                int number = r.nextInt(noOfNodes);
+                NodeInfo cn = nodeList.get(number);
+                //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                long startTime = System.currentTimeMillis();
-                c.insert_key(data[0], data[1], insHops);
-                long endTime = System.currentTimeMillis();
+                long startTime = System.nanoTime();
+                c.insert_key(data[0], data[1]);
+                long endTime = System.nanoTime();
                 long timetaken = endTime - startTime;
-                log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms" );
+                log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms" );
             }
             System.out.println("finished");
             myReader.close();
@@ -338,27 +334,23 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
         }
     }
     public void executeQuery () throws RemoteException{
-        //int i = 0;
-        System.out.println("hello");
+        log.info("Starting executing queries from query.txt file");
         Random r = new Random();
         try {
             File myObj = new File("../../../../transactions/query.txt");
             Scanner myReader = new Scanner(myObj);
             while (myReader.hasNextLine()) {
-                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
-                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                //if (i == 10) break;
-                Result getHops = new Result();
-                //i++;
+                int number = r.nextInt(noOfNodes);
+                NodeInfo cn = nodeList.get(number);
+                //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 String data = myReader.nextLine();
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                long startTime = System.currentTimeMillis();
-                String value = c.get_value(data, getHops);
-                long endTime = System.currentTimeMillis();
+                long startTime = System.nanoTime();
+                String value = c.get_value(data);
+                long endTime = System.nanoTime();
                 long timetaken = endTime - startTime;
-                log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms and resulted in value: " + value);
+                log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port+ " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms and resulted in value: " + value);
             }
-            System.out.println("finished");
             myReader.close();
         } catch (Exception e) {
             System.out.println("An error occurred.");
@@ -367,37 +359,33 @@ public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapN
     }
 
     public void executeCombo() throws RemoteException{
-        //int i = 0;
-        System.out.println("hello");
+        log.info("Starting executing requests from request.txt file");
         Random r = new Random();
         try {
             File myObj = new File("../../../../transactions/requests.txt");
             Scanner myReader = new Scanner(myObj);
             while (myReader.hasNextLine()) {
-                NodeInfo cn = nodeList.get(r.nextInt(noOfNodes));
-                System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                //if (i == 10) break;
-                Result result = new Result();
-                //i++;
+                int number = r.nextInt(noOfNodes);
+                NodeInfo cn = nodeList.get(number);
+                //System.out.println("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
                 String[] data = myReader.nextLine().split(", ");
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+cn.ipaddress+"_"+cn.port);
-                long startTime = System.currentTimeMillis(), endTime, timetaken;
+                long startTime = System.nanoTime(), endTime, timetaken;
                 if (data[0].equals("insert")) {
-                    c.insert_key(data[1], data[2], result);
-                    endTime = System.currentTimeMillis();
+                    c.insert_key(data[1], data[2]);
+                    endTime = System.nanoTime();
                     timetaken = endTime - startTime;
-                    log.info("Time taken to insert: " + data[0] + " with value: " + data[1] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms" );
+                    log.info("Time taken to insert: `" + data[1] + "` with value: " + data[2] + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms" );
                 }
                 else if (data[0].equals("query")) {
-                    String value = c.get_value(data[1], result);
-                    endTime = System.currentTimeMillis();
+                    String value = c.get_value(data[1]);
+                    endTime = System.nanoTime();
                     timetaken = endTime - startTime;
-                    log.info("Time taken for query of: " + data + " starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " is " + timetaken + " ms and resulted in value: " + value);
+                    log.info("Time taken for query of: `" + data[1] + "` starting from: ChordNode_"+cn.ipaddress+"_"+cn.port + " with Chord id " + nodeIds.get(number) + " is " + timetaken + " ms and resulted in value: " + value);
                 }
-                else System.out.println("Error In request");
+                else log.info("Error In request");
                     
             }
-            System.out.println("finished");
             myReader.close();
         } catch (Exception e) {
             System.out.println("An error occurred.");
