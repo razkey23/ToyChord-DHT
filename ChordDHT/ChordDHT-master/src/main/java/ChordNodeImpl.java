@@ -1,6 +1,3 @@
-
-
-
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.FileAppender;
 import org.apache.log4j.Level;
@@ -35,12 +32,11 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
      * Number of identifier bits.
      */
     private static int replication_Factor=2;
-    private static int m = 10;
+    private static int m = 11;
 
     /**
      * //Slices of each image (see demo part).
      */
-    private static final int IMAGE_STEP = 4;
     private static final int StabilizePeriod = 10000; // 10 sec
     private static final int FixFingerPeriod = 10000; // 10 sec
     private static final long serialVersionUID = 1L;
@@ -56,6 +52,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     private static Timer timerStabilize = new Timer();
     private static Timer timerFixFinger = new Timer();
     private static Logger log = null;
+    private static boolean chain_replication = true;
     private static String hostipaddress="127.0.0.1";
     /**
      * Data store for each Chord Node instance
@@ -74,14 +71,12 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     transient FingerTableEntry[] fingertable = null;
     NodeInfo predecessor;
     private ReentrantReadWriteLock data_rwlock = new ReentrantReadWriteLock();
-    private ArrayList<HashMap<String, Result>> metrics;
 
     protected ChordNodeImpl(NodeInfo node) throws RemoteException {
         super();
         this.node = node;
         this.predecessor = null;
         this.fingertable = new FingerTableEntry[fingerTableSize];
-        this.metrics = new ArrayList<>();
     }
 
     public ChordNodeImpl() throws RemoteException {
@@ -89,7 +84,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         this.node = null;
         this.predecessor = null;
         this.fingertable = new FingerTableEntry[fingerTableSize];
-        this.metrics = new ArrayList<>();
     }
 
     /**
@@ -102,9 +96,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         ChordNode c;
         ChordNodeImpl cni;
         boolean running = true;
-        long startTime, endTime, timetaken;
-        Result result = new Result();
-        HashMap<String, Result> met;
 
         if (args.length < 2) {
             System.out.println("Usage : java ChordNodeImpl <ip address of current node> <ipaddress of bootstrap>");
@@ -134,12 +125,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 	    String hosturl="rmi://"+hostipaddress+"/";
 	
         try {
-            startTime = System.currentTimeMillis();
-            result.latency = startTime;
-            //String rmiUrl = "rmi://" + args[1] + "/ChordRing";
-	    String rmiUrl="rmi://"+hostipaddress+"/ChordRing";
-            log.debug("Contacting Bootstrap Server " + rmiUrl);
-	  //  theRegistry = LocateRegistry.getRegistry("rmi://192.168.0.1");
+	        String rmiUrl="rmi://"+hostipaddress+"/ChordRing";
             bootstrap = (BootStrapNode) Naming.lookup(rmiUrl);
         } catch (MalformedURLException | RemoteException | NotBoundException e) {
             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -147,7 +133,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         try {
             while (true) {
-                log.trace("Checking for existing chord node instances [ChordNode_" + num + "] running on localhost");
                 try {
                     c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+nodeIPAddress+"_"+num);
                 } catch (Exception e) {
@@ -156,9 +141,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 if (c == null) {
 		    Registry theRegistry = LocateRegistry.getRegistry("rmi://"+hostipaddress+"",1099);
                     cni = new ChordNodeImpl();
-		            System.out.println("CrashedHere");
                     bootstrap.insertToRing(num, cni,nodeIPAddress);
-                   //Naming.bind("rmi://192.168.0.1/ChordNode_" + num, cni);
                     break;
                 } else {
                     num++;
@@ -169,17 +152,12 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             return;
         }
 
-        log.info("Chord node instance created with rmi name [ChordNode_" + num + "]");
-
         ArrayList<NodeInfo> nodes = bootstrap.addNodeToRing(nodeIPAddress, num + "");
         if (nodes != null) {
             cni.node = nodes.get(0);
             FingerTableEntry fte = new FingerTableEntry((cni.node.nodeID + 1) % maxNodes, nodes.get(1));
             cni.fingertable[0] = fte;
             cni.predecessor = nodes.get(2);
-            log.info("My ID: " + cni.node.nodeID);
-            log.info("Successor ID - " + cni.fingertable[0].successor.nodeID);
-            log.info("Predecessor ID - " + cni.predecessor.nodeID);
         } else {
             log.error("Join unsuccessful");
             return;
@@ -194,7 +172,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         log.removeAllAppenders();
         log.addAppender(fileAppender);
 
-        cni.run(result);
+        cni.run();
 
         Scanner sc = new Scanner(System.in, "UTF-8");
         String key, value;
@@ -203,7 +181,8 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         while (running) {
             System.out.println("\nMenu: \n1. Print Finger Table"
-                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n6. Insert file \n7. Retrieve file\n8. Experiments \n9. Leave Chord Ring\n10. Overlay");
+                    + "\n2. Get Key \n3. Put Key \n4. Delete Key \n5. Display data stored \n"
+                    +"6. Insert Elements\n7. Search Elements\n8. Execute Requests\n9. Leave Chord Ring\n10. Overlay");
             System.out.println("Enter your choice: ");
             try {
                 choice = sc.nextInt();
@@ -224,328 +203,86 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 case 2:
                     System.out.print("Enter key: ");
                     key = sc.nextLine();
-                    Result getHops = new Result();
                     if (key.equals("*")) {
                         String output=new String();
                         String empty="";
                         output=cni.getAllkeys(cni.node.nodeID,empty);
-                        //System.out.println(output);
-                        //cni.getAllKeys(cni.node.nodeID);
                     }
-                    startTime = System.currentTimeMillis();
-                    value = cni.get_value(key, getHops);
-                    System.out.println(value != null ? "Value is: " + value : "Key not found.");
-                    endTime = System.currentTimeMillis();
-                    timetaken = endTime - startTime;
-                    getHops.latency = timetaken;
-                    log.info("Hop Count for get key operation: " + getHops.hopCount);
-                    log.info("Time taken for get key operation: " + timetaken + "ms");
-                    met = new HashMap<>();
-                    met.put("GET", getHops);
-                    cni.metrics.add(met);
+                    else {
+                        value = cni.get_value(key);
+                        System.out.println(value != null ? "Value is: " + value : "Key not found.");
+                    }
                     break;
                 case 3:
                     System.out.print("Enter key: ");
                     key = sc.nextLine();
                     System.out.print("Enter value: ");
                     value = sc.nextLine();
-                    Result insHops = new Result();
-                    startTime = System.currentTimeMillis();
-                    res = cni.insert_key(key, value, insHops);
+                    res = cni.insert_key(key, value);
                     System.out.println(res ? key + ": " + value + " successfully inserted." : "Insertion unsuccessful.");
-                    endTime = System.currentTimeMillis();
-                    timetaken = endTime - startTime;
-                    insHops.latency = timetaken;
-                    log.info("Hop Count for insert key operation: " + insHops.hopCount);
-                    log.info("Time taken for insert key operation: " + timetaken + "ms");
-                    met = new HashMap<>();
-                    met.put("INSERT", insHops);
-                    cni.metrics.add(met);
                     break;
                 case 4:
                     System.out.print("Enter key: ");
                     key = sc.nextLine();
-                    Result delHops = new Result();
-                    startTime = System.currentTimeMillis();
-                    res = cni.delete_key(key, delHops);
+                    res = cni.delete_key(key);
                     System.out.println(res ? key + " successfully deleted." : "Key not found. Deletion unsuccessful.");
-                    endTime = System.currentTimeMillis();
-                    timetaken = endTime - startTime;
-                    delHops.latency = timetaken;
-                    log.info("Hop Count for delete key operation: " + delHops.hopCount);
-                    log.info("Time taken for delete key operation: " + timetaken + "ms");
-                    met = new HashMap<>();
-                    met.put("DELETE", delHops);
-                    cni.metrics.add(met);
                     break;
                 case 5:
                     System.out.println("Printing all data stored in the node");
                     cni.display_data_stored();
                     break;
                 case 6:
-                    try {
-                        System.out.println("File name: ");
-                        String resource = sc.nextLine();
-                        String res2 = resource.substring(0, resource.lastIndexOf("."));
-                        switch (FilenameUtils.getExtension(resource)) {
-                            case "png":
-                                final BufferedImage source = ImageIO.read(new File("resources/" + resource));
-                                int idx = 0;
-                                File dir = new File(res2 + "_parts");
-                                deleteDirectory(dir);
-                                if (!dir.mkdir()) {
-                                    throw new Exception("Failed to create a new directory..");
-                                }
-                                for (int y = 0; y < source.getHeight(); y += IMAGE_STEP) {
-                                    File file = new File(dir + "/" + res2 + idx++ + ".png");
-                                    ImageIO.write(source.getSubimage(0, y, 128, IMAGE_STEP), "png", file);
-                                    ImageCanvas imageCanvas = new ImageCanvas();
-                                    imageCanvas.images.add(ImageIO.read(file));
-                                    cni.insert_key(res2 + String.valueOf(idx - 1), makeString(imageCanvas), new Result());
-                                }
-                                deleteDirectory(new File(res2 + "_parts"));
-                                break;
-
-                            default:
-                                String Line;
-                                BufferedReader BufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream("resources/" + resource), StandardCharsets.UTF_8));
-                                while ((Line = BufferedReader.readLine()) != null) {
-                                    cni.insert_key(Line, "Explanation of " + Line, new Result());
-                                }
-                                BufferedReader.close();
-                                break;
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeInsert();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
                         }
-                    } catch (FileNotFoundException ex) {
-                        System.out.println("File not found...");
-                        ex.printStackTrace();
-                    } catch (IIOException e) {
-                        System.out.println("Unable to load file");
-                    } catch (IOException ex) {
-                        ex.printStackTrace();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        System.out.println("Final block of loadFile exception catcher!");
-                    }
-                    System.out.println("File uploaded successfully..");
+                    }).start();
+                    
                     break;
                 case 7:
-                    try {
-                        System.out.println("File name: ");
-                        String resource = sc.nextLine();
-                        String res3 = resource.substring(0, resource.lastIndexOf("."));
-                        switch (FilenameUtils.getExtension(resource)) {
-                            case "png":
-                            case "jpeg":
-                            default:
-                                BufferedImage finalImg = null;
-                                File dir = null;
-                                for (int i = 0; ; i++) {
-                                    String out = cni.get_value(res3 + i, new Result());
-                                    if (out == null) {
-                                        break;
-                                    } else if (i == 0) {
-                                        dir = new File(res3 + "_out");
-                                        deleteDirectory(dir);
-                                        if (!dir.mkdir()) {
-                                            throw new IOException("Failed to create a new directory..");
-                                        }
-                                    }
-                                    ImageCanvas Value = (ImageCanvas) fromString(out);
-                                    File file = new File(dir + "/" + res3 + i + ".png");
-                                    BufferedImage image = Value.images.get(0);
-                                    if (i == 0) {
-                                        finalImg = new BufferedImage(128, 128, image.getType());
-                                    }
-                                    ImageIO.write(image, "png", file);
-                                    finalImg.createGraphics().drawImage(image, 0, i * IMAGE_STEP, null);
-                                    System.out.println("Image part number " + (i + 1) + " retrieved!");
-                                }
-                                if (finalImg != null) {
-                                    File outFile = new File(res3 + ".png");
-
-                                    deleteDirectory(outFile);
-                                    deleteDirectory(new File(res3 + "_out"));
-
-                                    ImageIO.write(finalImg, "png", outFile);
-                                    System.out.println("Image retrieved successfully..");
-                                } else {
-                                    System.out.println("Image not found..");
-                                }
-                                break;
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeQuery();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
                         }
-                    } catch (IOException e) {
-                        System.out.println("Can not overwrite files.." +
-                                "\nHave you deleted the parts_ folder?");
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    }).start();
+                    
                     break;
-
                 case 8:
-                    System.out.println("Number of keys (power of 2): ");
-                    ExecutorService executorServicePUT = Executors.newFixedThreadPool(4);
-                    ExecutorService executorServiceGET = Executors.newFixedThreadPool(4);
-
-                    List<Callable<Integer>> putCallables = new ArrayList<>();
-                    List<Callable<Integer>> getCallables = new ArrayList<>();
-
-                    int numOfKeys = Integer.parseInt(sc.nextLine());
-                    try (BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("benchmark.txt", true), StandardCharsets.UTF_8))) {
-                        bw.newLine();
-                        bw.write("\nCount\tPut(ms)\tGet(ms)");
-                        bw.newLine();
-                        for (int cnt = 1; cnt <= numOfKeys; cnt *= 2) {
-                            bw.write(cnt + "\t");
-                            System.out.println("Count: " + cnt);
-
-                            int finalCnt = cnt;
-
-                            //PUT
-                            startTime = System.currentTimeMillis();
-                            putCallables.add(() -> {
-                                for (int i = 0; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    String value1 = String.valueOf("value_t1" + i);
-                                    Result result1 = new Result();
-                                    cni.insert_key(key1, value1, result1);
-                                }
-                                return 0;
-                            });
-
-                            putCallables.add(() -> {
-                                for (int i = 1; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    String value1 = String.valueOf("value_t2" + i);
-                                    Result result1 = new Result();
-                                    cni.insert_key(key1, value1, result1);
-                                }
-                                return 0;
-                            });
-
-                            putCallables.add(() -> {
-                                for (int i = 2; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    String value1 = String.valueOf("value_t3" + i);
-                                    Result result1 = new Result();
-                                    cni.insert_key(key1, value1, result1);
-                                }
-                                return 0;
-                            });
-
-                            putCallables.add(() -> {
-                                for (int i = 3; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    String value1 = String.valueOf("value_t4" + i);
-                                    Result result1 = new Result();
-                                    cni.insert_key(key1, value1, result1);
-                                }
-                                return 0;
-                            });
-
-                            executorServicePUT.invokeAll(putCallables);
-                            endTime = System.currentTimeMillis();
-                            timetaken = endTime - startTime;
-                            bw.write(timetaken + "\t");
-
-                            //GET
-                            startTime = System.currentTimeMillis();
-                            getCallables.add(() -> {
-                                for (int i = 0; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    Result result1 = new Result();
-                                    cni.get_value(key1, result1);
-                                }
-                                return 0;
-                            });
-
-                            getCallables.add(() -> {
-                                for (int i = 1; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    Result result1 = new Result();
-                                    cni.get_value(key1, result1);
-                                }
-                                return 0;
-                            });
-
-                            getCallables.add(() -> {
-                                for (int i = 2; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    Result result1 = new Result();
-                                    cni.get_value(key1, result1);
-                                }
-                                return 0;
-                            });
-
-                            getCallables.add(() -> {
-                                for (int i = 3; i <= finalCnt; i += 4) {
-                                    String key1 = String.valueOf(finalCnt * i);
-                                    Result result1 = new Result();
-                                    cni.get_value(key1, result1);
-                                }
-                                return 0;
-                            });
-                            executorServicePUT.invokeAll(getCallables);
-                            endTime = System.currentTimeMillis();
-                            timetaken = endTime - startTime;
-                            bw.write(timetaken + "\n");
-                        }
-
-                        //Shutdown both executors.
-                        try {
-                            log.info("attempt to shutdown PUT executor");
-                            executorServicePUT.shutdown();
-                            executorServicePUT.awaitTermination(10, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                            log.error("tasks interrupted");
-                        } finally {
-                            if (!executorServicePUT.isTerminated()) {
-                                log.error("cancel non-finished tasks");
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                bootstrap.executeCombo();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
                             }
-                            executorServicePUT.shutdownNow();
-                            log.info("shutdown finished");
                         }
-
-                        try {
-                            log.info("attempt to shutdown GET executor");
-                            executorServiceGET.shutdown();
-                            executorServiceGET.awaitTermination(10, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                            log.error("tasks interrupted");
-                        } finally {
-                            if (!executorServiceGET.isTerminated()) {
-                                log.error("cancel non-finished tasks");
-                            }
-                            executorServiceGET.shutdownNow();
-                            log.info("shutdown finished");
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        return;
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    break;
+                    }).start();
+                    
+                    break;                
                 case 9:
-                    Result lhops = new Result();
-                    startTime = System.currentTimeMillis();
-                    if (cni.leave_ring(lhops)) {
+                    if (cni.leave_ring()) {
                         timerStabilize.cancel();
                         timerFixFinger.cancel();
                         System.out.println("Node left...No more operations allowed");
 
                         try {
                             bootstrap.removeFromRing(cni.node.port,nodeIPAddress);
-                            //Naming.unbind("rmi://localhost/ChordNode_" + cni.node.port);
-                            log.debug("ChordNode RMI object unbinded");
                             System.out.println("Node removed from RMI registry!");
                         } catch (Exception e) {
                             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
                         }
                         running = false;
-                        endTime = System.currentTimeMillis();
-                        timetaken = endTime - startTime;
-                        lhops.latency = timetaken;
-                        log.info("Time taken for leaving the Chord network:" + timetaken + "ms");
                         sc.close();
                     } else {
                         System.out.println("Error: Cannot leave ring right now");
@@ -563,68 +300,13 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
     }
 
-    /**
-     * Read the object from Base64 string.
-     *
-     * @param s The serialized object.
-     * @return The deserialized object.
-     * @throws IOException            when decoding fails.
-     * @throws ClassNotFoundException when readObj fails.
-     */
-    private static Object fromString(String s) throws IOException, ClassNotFoundException {
-        byte[] data = Base64.getDecoder().decode(s);
-        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data));
-        Object o = ois.readObject();
-        ois.close();
-        return o;
-    }
-
-    /**
-     * Write the object to a Base64 string.
-     *
-     * @param o The object to be serialized.
-     * @return The string of the serialized object.
-     * @throws IOException when encoding fails.
-     */
-    private static String makeString(Serializable o) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(baos);
-        oos.writeObject(o);
-        oos.close();
-        return Base64.getEncoder().encodeToString(baos.toByteArray());
-    }
-
-    /**
-     * Right way to delete a non empty directory in Java
-     *
-     * @param dir The directory to be deleted (empty or not).
-     * @return A boolean value indicating the success or failure of the task.
-     */
-    private static boolean deleteDirectory(File dir) {
-        if (dir.isDirectory()) {
-            File[] children = dir.listFiles();
-            for (int i = 0; i < (children != null ? children.length : 0); i++) {
-                boolean success = deleteDirectory(children[i]);
-                if (!success) {
-                    return false;
-                }
-            }
-        }
-        return dir.delete();
-    }
-
     @Override
-    public NodeInfo find_successor(int id, Result result) throws RemoteException {
-        log.debug("Searching for the successor of id: " + id);
-        NodeInfo newNode = find_predecessor(id, result);
+    public NodeInfo find_successor(int id) throws RemoteException {
+        NodeInfo newNode = find_predecessor(id);
         try {
             ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-            //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
-            if (newNode.nodeID != this.node.nodeID) {
-                result.hopCount++;
-            }
+            
             newNode = c.get_successor();
-            log.debug("Successor for id: " + id + " is " + newNode.nodeID + "\n");
         } catch (Exception e) {
             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             return null;
@@ -633,7 +315,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public NodeInfo find_predecessor(int id, Result result) throws RemoteException {
+    public NodeInfo find_predecessor(int id) throws RemoteException {
         NodeInfo nn = this.node;
         int myID = this.node.nodeID;
         int succID = this.get_successor().nodeID;
@@ -642,24 +324,16 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
         while ((myID >= succID && (myID >= id && succID < id)) || (myID < succID && (myID >= id || succID < id))) {
             try {
-                log.debug("Looking for closest preceding finger of id: " + id + " in node: " + nn.nodeID);
                 if (nn == this.node) {
                     nn = closest_preceding_finger(id);
                 } else {
-                    if (nn.nodeID != this.node.nodeID) {
-                        result.hopCount++;
-                    }
                     assert c != null;
                     nn = c.closest_preceding_finger(id);
                 }
 
                 myID = nn.nodeID;
                 c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+nn.ipaddress+"_"+nn.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + nn.ipaddress + "/ChordNode_" + nn.port);
                 succID = c.get_successor().nodeID;
-                if (nn.nodeID != this.node.nodeID) {
-                    result.hopCount++;
-                }
             } catch (Exception e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
                 return null;
@@ -691,11 +365,10 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 	(4) If no such finger table entry is found, contact bootstrap to return a different successor.
 	*/
 
-    public void init_finger_table(NodeInfo n, Result result) throws RemoteException {
+    public void init_finger_table(NodeInfo n) throws RemoteException {
         ChordNode c;
         try {
              c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-            //c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
 
             int myID = this.node.nodeID;
             for (int i = 0; i < fingerTableSize - 1; i++) {
@@ -706,10 +379,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
                     fingertable[i + 1].successor = fingertable[i].successor;
                 } else {
-                    if (n.nodeID != this.node.nodeID) {
-                        result.hopCount++;
-                    }
-                    NodeInfo s = c.find_successor(fingertable[i + 1].start, result);
+                    NodeInfo s = c.find_successor(fingertable[i + 1].start);
 
                     int myStart = fingertable[i + 1].start;
                     int succ = s.nodeID;
@@ -725,49 +395,37 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                         fingertable[i + 1].successor = s;
                     }
                 }
-                log.debug("FTE " + (i + 1) + " set as: " + fingertable[i + 1].start + " || " + fingertable[i + 1].successor.nodeID);
-            }
-
-            if (n.nodeID != this.node.nodeID) {
-                result.hopCount++;
             }
             c.set_predecessor(this.node);
-            log.info("predecessor of node " + n.nodeID + " set as " + this.node.nodeID);
         } catch (MalformedURLException | NotBoundException e) {
             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
         }
     }
 
-    public void update_others_before_leave(Result result) throws RemoteException {
+    public void update_others_before_leave() throws RemoteException {
         for (int i = 1; i <= fingerTableSize; i++) {
             int id = this.node.nodeID - (int) Math.pow(2, i - 1) + 1;
             if (id < 0) {
                 id += maxNodes;
             }
-            NodeInfo p = find_predecessor(id, result);
+            NodeInfo p = find_predecessor(id);
             try {
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+p.ipaddress+"_"+p.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
-                c.update_finger_table_leave(this.node, i - 1, this.get_successor(), result);
-                if (this.node.nodeID != p.nodeID)
-                    result.hopCount++;
+                c.update_finger_table_leave(this.node, i - 1, this.get_successor());
             } catch (Exception e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             }
         }
     }
 
-    public void update_finger_table_leave(NodeInfo t, int i, NodeInfo s, Result result) throws RemoteException {
+    public void update_finger_table_leave(NodeInfo t, int i, NodeInfo s) throws RemoteException {
         if (fingertable[i].successor.nodeID == t.nodeID && t.nodeID != s.nodeID) {
             fingertable[i].successor = s;
             NodeInfo p = predecessor;
 
             try {
                 ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+p.ipaddress+"_"+p.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + p.ipaddress + "/ChordNode_" + p.port);
-                c.update_finger_table_leave(t, i, s, result);
-                if (this.node.nodeID != p.nodeID)
-                    result.hopCount++;
+                c.update_finger_table_leave(t, i, s);
             } catch (Exception e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             }
@@ -780,9 +438,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public void stabilize(Result result) {
-        log.debug("Stabilization running on chord Node" + this.node.nodeID);
-
+    public void stabilize() {
         NodeInfo successorNodeInfo = null, tempNodeInfo = null;
         ChordNode successor, temp;
 
@@ -793,9 +449,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 // single node so no stabilization
                 successor = this;
             } else {
-                log.debug("RMI CALL TO HEART BEAT:" + "rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
                 successor = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+successorNodeInfo.ipaddress+"_"+successorNodeInfo.port);
-                //successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
                 successor.send_beat();
             }
         } catch (Exception e) {
@@ -803,7 +457,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             try {
                 assert successorNodeInfo != null;
                 successor = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+successorNodeInfo.ipaddress+"_"+successorNodeInfo.port);
-                //successor = (ChordNode) Naming.lookup("rmi://" + successorNodeInfo.ipaddress + "/ChordNode_" + successorNodeInfo.port);
                 successor.send_beat();
             } catch (Exception e1) {
                 successor = null;
@@ -824,13 +477,10 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 assert tempNodeInfo != null;
                 while (true) {// follow the predecessor chain from tempNodeInfo
                     try {
-                        log.debug("Current node in predecessor chain " + tempNodeInfo.nodeID);
                         temp = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+tempNodeInfo.ipaddress+"_"+tempNodeInfo.port);
-                        //temp = (ChordNode) Naming.lookup("rmi://" + tempNodeInfo.ipaddress + "/ChordNode_" + tempNodeInfo.port);
                         if (temp.get_predecessor().nodeID == successorNodeInfo.nodeID) {
                             temp.set_predecessor(this.node);
                             this.set_successor(tempNodeInfo);
-                            log.debug("New successor is " + tempNodeInfo.nodeID);
                             break;
                         }
                         tempNodeInfo = temp.get_predecessor();
@@ -860,8 +510,6 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             NodeInfo x = null;
             try {
                 x = successor.get_predecessor();
-                if (this.node.nodeID != successorNodeInfo.nodeID)
-                    result.hopCount++;
             } catch (RemoteException e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             }
@@ -910,23 +558,19 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public void fix_fingers(Result result) throws RemoteException {
-        log.debug("Fix_fingers running on chord Node " + node.nodeID);
+    public void fix_fingers() throws RemoteException {
         //periodically fix all fingers
         ChordNodeImpl.fix_finger_count++;
         if (ChordNodeImpl.fix_finger_count == ChordNodeImpl.fingerTableSize) {
             ChordNodeImpl.fix_finger_count = 1;
         }
-        log.debug("Running fix_finger with i: " + fix_finger_count);
-        fingertable[fix_finger_count].successor = find_successor(fingertable[fix_finger_count].start, result);
+        fingertable[fix_finger_count].successor = find_successor(fingertable[fix_finger_count].start);
     }
 
     /**
      * This function is called after contacting the BootStrap server and obtaining the successor and predecessor nodes to initialize finger table and update other nodes after joining.
-     *
-     * @param result Result object to assist in metrics collection
      */
-    void run(final Result result) {
+    void run() {
         ChordNode c;
         NodeInfo suc = fingertable[0].successor;
 
@@ -961,50 +605,31 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 		*/
 
         if (ringsize > 1) { //More than one node in the Chord Ring
-
-            log.info("Starting finger table initialization.\n");
             try {
-                this.init_finger_table(suc, result);
+                this.init_finger_table(suc);
             } catch (RemoteException e) {
                 log.error(e);
             }
-
-            log.info("Starting key migration");
             try {
                 c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+suc.ipaddress+"_"+suc.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + suc.ipaddress + "/ChordNode_" + suc.port);
-                c.migrate_keys(this.predecessor, this.node, result,0);
-                if (this.node.nodeID != suc.nodeID)
-                    result.hopCount++;
+                c.migrate_keys(this.predecessor, this.node,0);
             } catch (Exception e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             }
 
             try {// set successor of predecessor as me
                 c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+predecessor.ipaddress+"_"+predecessor.port);
-                //c = (ChordNode) Naming.lookup("rmi://" + predecessor.ipaddress + "/ChordNode_" + predecessor.port);
                 c.set_successor(this.node);
-                log.info("successor of node " + predecessor.nodeID + " set as " + this.node.nodeID);
-
-                if (predecessor.nodeID != this.node.nodeID)
-                    result.hopCount++;
 
             } catch (Exception e) {
                 log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
             }
         }
 
-        log.info("Done with node initialization");
         try {
             bootstrap.acknowledgeNodeJoin(this.node.nodeID);
             endTime = System.currentTimeMillis();
-            long timetaken = endTime - result.latency;
-            result.latency = timetaken;
-            log.info("Hop Count while joining Chord network: " + result.hopCount);
-            log.info("Time taken for node to join the Chord network: " + timetaken + "ms");
-            HashMap<String, Result> m = new HashMap<>();
-            m.put("JOIN", result);
-            this.metrics.add(m);
+            long timetaken = endTime;
         } catch (Exception e) {
             log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
         }
@@ -1013,7 +638,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         //Set the timer to run notify every StabilizePeriod
         timerStabilize.scheduleAtFixedRate(new TimerTask() {
             public void run() {
-                stabilize(result);
+                stabilize();
             }
         }, new Date(System.currentTimeMillis()), ChordNodeImpl.StabilizePeriod);
 
@@ -1021,7 +646,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         timerFixFinger.scheduleAtFixedRate(new TimerTask() {
             public void run() {
                 try {
-                    fix_fingers(result);
+                    fix_fingers();
                 } catch (Exception e) {
                     log.error(e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
                 }
@@ -1058,36 +683,18 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public boolean insert_key(String key, String value, Result result) {
+    public boolean insert_key(String key, String value) {
         try {
-            long endTime, startTime, timetaken;
-            startTime = System.currentTimeMillis();
             int keyID = generate_ID(key, maxNodes);
-            log.info("Inserting keyID " + keyID + " for key " + key + " with value " + value);
-            NodeInfo n = find_successor(keyID, result);
+            NodeInfo n = find_successor(keyID);
             if (n != this.node) {
                 ChordNode c= c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-               //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
-                result.hopCount++;
-                boolean flag = c.insert_key_local(keyID, key, value, result,false,0);
-                endTime = System.currentTimeMillis();
-                timetaken = endTime - startTime;
-                result.latency = timetaken;
-                log.info("Hop Count for insert key operation: " + result.hopCount);
-                log.info("Time taken for insert key operation: " + timetaken + "ms");
+                boolean flag = c.insert_key_local(keyID, key, value,false,0);
                 return flag;
             } else {
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                //boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
-                boolean flag=insert_key_local(keyID,key,value,result,true,0);
+                boolean flag=insert_key_local(keyID,key,value,true,0);
                 ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                boolean flag1=crep.insert_key_local(keyID,key,value,result,true,1);
-                endTime = System.currentTimeMillis();
-                timetaken = endTime - startTime;
-                result.latency = timetaken;
-                log.info("Hop Count for insert key operation: " + result.hopCount);
-                log.info("Time taken for insert key operation: " + timetaken + "ms");
+                boolean flag1=crep.insert_key_local(keyID,key,value,true,1);
                 return flag;
             }
         } catch (Exception e) {
@@ -1101,18 +708,15 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
 
 
     @Override
-    public boolean delete_key(String key, Result result) {
+    public boolean delete_key(String key) {
         try {
             int keyID = generate_ID(key, maxNodes);
-            log.info("Deleting key :" + key + "with key hash" + keyID);
-            NodeInfo n = find_successor(keyID, result);
+            NodeInfo n = find_successor(keyID);
             if (n != this.node) {
                 ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
-                result.hopCount++;
-                return c.delete_key_local(keyID, key, result,false,0);
+                return c.delete_key_local(keyID, key,false,0);
             } else {
-                return delete_key_local(keyID, key, result,false,0);
+                return delete_key_local(keyID, key,false,0);
             }
         } catch (Exception e) {
             log.error("Error in deleting key" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
@@ -1121,26 +725,29 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public String get_value(String key, Result result) {
+    public String get_value(String key) {
         try {
-            long endTime, startTime, timetaken;
-            startTime = System.currentTimeMillis();
             int keyID = generate_ID(key, maxNodes);
-            NodeInfo n = find_successor(keyID, result);
+            String val = null;
+            if(!chain_replication){
+                data_rwlock.readLock().lock();
+                HashMap <String,Pair<Integer,String>> entry= data.get(keyID);
+                if (entry != null) {
+                    Pair<Integer,String> pair = entry.get(key);
+                    val = pair.getValue();
+                }
+                data_rwlock.readLock().unlock();
+                if (entry != null) {
+                    return val;
+                }
+            }
+            NodeInfo n = find_successor(keyID);
             if (n != this.node) {
                 ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+n.ipaddress+"_"+n.port);
-                //ChordNode c = (ChordNode) Naming.lookup("rmi://" + n.ipaddress + "/ChordNode_" + n.port);
-                result.hopCount++;
-                String val = c.get_key_local(keyID, key, result);
-                endTime = System.currentTimeMillis();
-                timetaken = endTime - startTime;
-                log.info("Time taken for query key operation: " + timetaken + "ms");
+                val = c.get_key_local(keyID, key);
                 return val;
             } else {
-                String val = get_key_local(keyID, key, result);
-                endTime = System.currentTimeMillis();
-                timetaken = endTime - startTime;
-                log.info("Time taken for query key operation: " + timetaken + "ms");
+                val = get_key_local(keyID, key);
                 return val;
             }
         } catch (Exception e) {
@@ -1150,26 +757,19 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public boolean insert_key_local(int keyID, String key, String value, Result result,boolean insertHere,Integer replica) throws RemoteException {
+    public boolean insert_key_local(int keyID, String key, String value,boolean insertHere,Integer replica) throws RemoteException {
        if(insertHere=false) {  
             boolean res = true;
             data_rwlock.writeLock().lock();
             if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
                 data_rwlock.writeLock().unlock();
-                res = insert_key(key, value, result);
+                res = insert_key(key, value);
             } else {
-                //HashMap<String, String> entry = data.computeIfAbsent(keyID, k -> new HashMap<>());
                 HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(keyID, k -> new HashMap<>());
                 Pair<Integer,String> pair = new Pair<>(0, value);
                 entry.put(key,pair);
-            //entry.put(key, value);
-
                 data_rwlock.writeLock().unlock();
-                log.info("Inserted key - " + key + " with value - " + value);
             }
-            System.out.print(this.node.nodeID);
-            System.out.print(" ");
-            System.out.println(System.nanoTime());
             return res;
             }
       else {
@@ -1178,43 +778,49 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             HashMap<String,Pair<Integer,String>> entry= data.computeIfAbsent(keyID, k -> new HashMap<>());
             Pair<Integer,String> pair = new Pair<>(replica, value);
             entry.put(key,pair);
-            //entry.put(key, value);
-        try{
             data_rwlock.writeLock().unlock();
             if (replica!=replication_Factor) {
-                ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                boolean flag1=crep.insert_key_local(keyID,key,value,result,true,replica+1);
+                if (chain_replication) {
+                    try {
+                        ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
+                        boolean flag1=crep.insert_key_local(keyID,key,value,true,replica+1);
+                    } catch (Exception e) {
+                        log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                        return false;
+                    }
+                }
+                else {
+                    NodeInfo succ_node = this.get_successor();
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + hostipaddress + "/ChordNode_" + succ_node.ipaddress + "_" + succ_node.port);
+                                boolean flag1=crep.insert_key_local(keyID,key,value,true,replica+1);
+                            } catch (Exception e) {
+                                log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                }
             }
-        } catch (Exception e) {
-            log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
-            return false;
-        }
-            log.info("Inserted key - " + key + " with value - " + value);
-            System.out.print(this.node.nodeID);
-            System.out.print(" ");
-            System.out.println(System.nanoTime());
-            //System.out.println(System.currentTimeMillis());
             return res;            
-     }
+        }
     }
 
     @Override
-    public boolean delete_key_local(int keyID, String key, Result result,boolean deleteHere,Integer replica) throws RemoteException {
+    public boolean delete_key_local(int keyID, String key,boolean deleteHere,Integer replica) throws RemoteException {
         if(deleteHere=false) {  
             boolean res = true;
             data_rwlock.writeLock().lock();
             if (!inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
             data_rwlock.writeLock().unlock();
-                res = delete_key(key, result);
+                res = delete_key(key);
             } else 
             {
             HashMap<String,Pair<Integer,String>> entry= data.get(keyID);
-            //HashMap<String, String> entry = data.get(keyID);
             if (entry != null)
                 if (entry.get(key) != null) {
                     entry.remove(key);
-                    log.info("Deleted key - " + key);
                 } else {
                     res = false;
                 }
@@ -1223,23 +829,35 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
             return res;
         }
         else {
-            try {
-                if (replica!=replication_Factor) {
-                    ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                    //ChordNode crep = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-                    crep.delete_key_local(keyID, key, result,true,replica+1);
+            if (replica!=replication_Factor) {
+                if (chain_replication) {
+                    try {
+                        ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
+                        crep.delete_key_local(keyID, key,true,replica+1);
+                    } catch (Exception e) {
+                        log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                    }
                 }
-            } catch (Exception e1) {
-                e1.printStackTrace();
+                else {
+                    NodeInfo succ_node = this.get_successor();
+                    new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                ChordNode crep = (ChordNode) Naming.lookup("rmi://" + hostipaddress + "/ChordNode_" + succ_node.ipaddress + "_" + succ_node.port);
+                                crep.delete_key_local(keyID, key,true,replica+1);
+                            } catch (Exception e) {
+                                log.error("Error in inserting keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                            }
+                        }
+                    }).start();
+                }
             }
             boolean res = true;
             data_rwlock.writeLock().lock();
             HashMap<String,Pair<Integer,String>> entry= data.get(keyID);
-            //HashMap<String, String> entry = data.get(keyID);
             if (entry != null)
                 if (entry.get(key) != null) {
                     entry.remove(key);
-                    log.info("Deleted key - " + key);
                 } else {
                     res = false;
                 }
@@ -1249,91 +867,72 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     }
 
     @Override
-    public String get_key_local(int keyID, String key, Result result) throws RemoteException {
-
+    public String get_key_local(int keyID, String key) throws RemoteException {
         String val = null;
-        
-        //Pair<Integer,String> pair = new Pair<>();
-        
         data_rwlock.readLock().lock();
         
         HashMap <String,Pair<Integer,String>> entry= data.get(keyID);
-        //HashMap<String, String> entry = data.get(keyID);
         if (entry != null) {
             Pair<Integer,String> pair = entry.get(key);
-            //pair = entry.get(key);
-            val = pair.getValue();
-            //val = entry.get(key);
+            if(chain_replication) {
+                if(pair.getKey() != replication_Factor) {
+                    try {
+                        ChordNode crep= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
+                        val = crep.get_key_local(keyID, key);
+                    } catch (Exception e) {
+                        log.error("Error in searching keys" + e.getClass() + ": " + e.getMessage() + ": " + e.getCause() + "\n" + Arrays.toString(e.getStackTrace()), e);
+                    }
+                }
+                else {
+                    val = pair.getValue();
+                }
+            }
+            else {
+                val = pair.getValue();
+            }
         }
 
         data_rwlock.readLock().unlock();
         if (entry == null && !inCircularIntervalEndInclude(keyID, get_predecessor().nodeID, node.nodeID)) {
-            val = get_value(key, result);
+            val = get_value(key);
         }
         return val;
     }
 
     @Override
-    public boolean leave_ring(Result result) throws RemoteException {
+    public boolean leave_ring() throws RemoteException {
         ChordNode c;
-        System.out.print("I am here");
         data_rwlock.writeLock().lock();
-        System.out.print("I am here INSIDE");
         try {
             c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-           // c = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
             for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
-                System.out.println("CHECK");
-            //for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
                 int key = hashkeys.getKey();
-                //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
                 for (Map.Entry<String,Pair<Integer,String>> e: hashkeys.getValue().entrySet()) {
             
                     Pair <Integer,String> pair = e.getValue();
-                    System.out.println(e.getKey());
-                    System.out.println(pair.getValue());
-                   // log.info("Migrating - HashKey: " + key + "\t Key: " + e.getKey() + "\t Value: " + e.getValue());
-                   // c.insert_key_local(key, e.getKey(), e.getValue(), result);
-                  // Pair <Integer,String> pair = e.getValue();
                    data_rwlock.writeLock().unlock();
-                   c.insert_key_local(key,e.getKey(),pair.getValue(),result,true,pair.getKey());
-                    if (this.node.nodeID != this.get_successor().nodeID)
-                        result.hopCount++;
-                
+                   c.insert_key_local(key,e.getKey(),pair.getValue(),true,pair.getKey());
                    data_rwlock.writeLock().lock();
                 }
             }
-            log.info("Key migration on leaving done");
             data.clear();
-            log.debug("Data cleared before leaving");
 
         } catch (Exception e) {
-            System.out.println("Error ");
             log.error(e);
             return false;
         } finally {
-            System.out.println("Never reached this point");
             data_rwlock.writeLock().unlock();
         }
         try {
             //Set successor's predecessor to my predecessor
-            if (this.node.nodeID != this.get_successor().nodeID) {
-                result.hopCount++;
-            }
             c.set_predecessor(this.get_predecessor());
 
             //Set predecessor's successor to my successor
             c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.predecessor.ipaddress+"_"+this.predecessor.port);
-            //c = (ChordNode) Naming.lookup("rmi://" + this.predecessor.ipaddress + "/ChordNode_" + this.predecessor.port);
-            if (this.node.nodeID != this.get_successor().nodeID) {
-                result.hopCount++;
-            }
             c.set_successor(this.get_successor());
-            System.out.println("Stuc here?");
             //Inform bootstrap and other chord nodes of departure
             bootstrap.removeNodeFromRing(this.node);
-            System.out.println("Stuck here?");
-            update_others_before_leave(result);
+            update_others_before_leave();
         } catch (Exception e) {
             log.error(e);
         }
@@ -1344,46 +943,13 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
     @Override
     public int generate_ID(String key, int maxNodes) throws RemoteException, NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("SHA-1");
-        System.out.println(maxNodes);
         md.reset();
         byte[] hashBytes;
         hashBytes = md.digest(key.getBytes(StandardCharsets.UTF_8));
         BigInteger hashValue = new BigInteger(1, hashBytes);
-        log.debug("key:" + key + " hash:" + Math.abs(hashValue.intValue()) % maxNodes);
         return Math.abs(hashValue.intValue()) % maxNodes;
     }
-
-   /* @Override
-    public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result) throws RemoteException {
-        ArrayList<Integer> removelist = new ArrayList<>();
-
-        data_rwlock.writeLock().lock();
-        
-        for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
-        //for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
-            int key = hashkeys.getKey();
-            if (this.inCircularIntervalEndInclude(key, pred.nodeID, newNode.nodeID)) {
-                for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
-                //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
-                    try {
-                        ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
-                        Pair<Integer,String> pair = e.getValue();
-                        c.insert_key_local(key, e.getKey(), pair.getValue(), result,false,pair.getKey());
-                    } catch (Exception e1) {
-                        e1.printStackTrace();
-                    }
-                }
-                removelist.add(key);
-            }
-        }
-        for (Integer i : removelist) {
-            data.remove(i);
-        }
-        data_rwlock.writeLock().unlock();
-    } */
-
-    
-public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer replication_number) throws RemoteException {
+public void migrate_keys(NodeInfo pred, NodeInfo newNode, Integer replication_number) throws RemoteException {
     ArrayList<Integer> removelist = new ArrayList<>();
     data_rwlock.writeLock().lock();
 
@@ -1398,9 +964,8 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     data_rwlock.writeLock().unlock();
                     try {
                         ChordNode c= (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
                         
-                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), true, pair.getKey());
                     } catch (Exception e1) {
                         e1.printStackTrace();
                     }
@@ -1412,9 +977,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     data_rwlock.writeLock().unlock();
                     try {
                         ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
-                        
-                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), true, pair.getKey());
                     } catch (Exception e1) {
                         e1.printStackTrace();
                     }
@@ -1427,9 +990,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     data_rwlock.writeLock().unlock();
                     try {
                         ChordNode c = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+newNode.ipaddress+"_"+newNode.port);
-                        //ChordNode c = (ChordNode) Naming.lookup("rmi://" + newNode.ipaddress + "/ChordNode_" + newNode.port);
-                        
-                        c.insert_key_local(key, e.getKey(), pair.getValue(), result, true, pair.getKey());
+                        c.insert_key_local(key, e.getKey(), pair.getValue(), true, pair.getKey());
                     } catch (Exception e1) {
                         e1.printStackTrace();
                     }
@@ -1456,18 +1017,13 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                     entry.put(e.getKey(), newValues);
                 }
             }
-            //removelist.add(key);
         }
-        /*for (Integer i : removelist) {
-            data.remove(i);
-        }*/
     }
     
     data_rwlock.writeLock().unlock();
     try {
         ChordNode nextNode = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-        //ChordNode nextNode = (ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
-        if(replication_number != replication_Factor) nextNode.migrate_keys(newNode, this.node, result, replication_number+1);
+        if(replication_number != replication_Factor) nextNode.migrate_keys(newNode, this.node, replication_number+1);
     } catch (Exception e1) {
         e1.printStackTrace();
     }
@@ -1476,13 +1032,10 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
     @Override
     public void display_data_stored() throws RemoteException {
         for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
-       // for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
             int key = hashkeys.getKey();
             for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
-            //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
                 System.out.print("Hash Key: " + key);
                 System.out.print("\tActual Key: " + e.getKey());
-                //System.out.println("\tActual Value: " + e.getValue());
                 Pair pair = e.getValue();
                 System.out.print("\tReplica: " + pair.getKey());
                 System.out.println("\tActual Value: " + pair.getValue());
@@ -1493,19 +1046,15 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
     
 
     public String getAllkeys(Integer term,String currentResult) throws RemoteException {
-        /* I have to get the nodes and send them to my Successor */
         data_rwlock.writeLock().lock();
       
         if (term!=this.node.nodeID || currentResult.isEmpty()==true){
             String x= display_data_stored_string(this.node.nodeID, currentResult);
-        /*X has the String of the calling node ,need  to add it to current result and then send it to successor */
             String newCurrentResult=currentResult+x;
-            System.out.println("Got here");
             String useless=new String();
             data_rwlock.writeLock().unlock();
             try{
                 ChordNode crep = (ChordNode) Naming.lookup("rmi://"+hostipaddress+"/ChordNode_"+this.get_successor().ipaddress+"_"+this.get_successor().port);
-                //ChordNode crep=(ChordNode) Naming.lookup("rmi://" + this.get_successor().ipaddress + "/ChordNode_" + this.get_successor().port);
                 useless = crep.getAllkeys(term, newCurrentResult);
             }
             catch (Exception e1) {
@@ -1515,11 +1064,7 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
             return empty;
         }
         else {
-            //String x= display_data_stored_string(this.node.nodeID, currentResult);
-        /*X has the String of the calling node ,need  to add it to current result and then send it to successor */
-            //String newCurrentResult=currentResult+x;
             data_rwlock.writeLock().unlock();
-            //System.out.println("****");
             System.out.println(currentResult);
             return currentResult;
         }
@@ -1533,20 +1078,22 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
         String temp1= new String();
         String temp2 = new String();
         String temp3= new String();
+        int i = 0;
         for (Map.Entry<Integer,HashMap<String,Pair<Integer,String>>> hashkeys : data.entrySet()) {
        // for (Map.Entry<Integer, HashMap<String, String>> hashkeys : data.entrySet()) {
             int key = hashkeys.getKey();
             for (Map.Entry<String,Pair<Integer,String>> e : hashkeys.getValue().entrySet()) {
             //for (Map.Entry<String, String> e : hashkeys.getValue().entrySet()) {
-                 temp= new String("Hash Key: " + key);
-                 temp1=new String ("\tActual Key: " + e.getKey());
+                i ++;
+                temp= new String("Hash Key: " + key);
+                temp1=new String ("\tActual Key: " + e.getKey());
                 Pair pair = e.getValue();
-                 temp2 = new String("\tReplica: " + pair.getKey());
-                 temp3 = new String("\tActual Value: " + pair.getValue());
+                temp2 = new String("\tReplica: " + pair.getKey());
+                temp3 = new String("\tActual Value: " + pair.getValue());
             }
             accum+=temp+temp1+temp2+temp3+"\n";
         }
-        return start+accum+"***************************\n";
+        return start+accum+String.valueOf(i)+"***************************\n" ;
     } 
     
 
@@ -1564,10 +1111,5 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Result result, Integer
                 e.printStackTrace();
             }
         }
-    }
-
-    @Override
-    public ArrayList<HashMap<String, Result>> getMetrics() throws RemoteException {
-        return this.metrics;
     }
 }
