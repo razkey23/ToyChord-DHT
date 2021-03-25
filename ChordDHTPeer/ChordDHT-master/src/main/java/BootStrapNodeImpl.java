@@ -29,7 +29,8 @@ import org.apache.log4j.PatternLayout;
 public class BootStrapNodeImpl extends UnicastRemoteObject implements BootStrapNode {
     private static final long serialVersionUID = 10L;
 
-    private static String hostipaddress="127.0.0.1";
+    private static String hostipaddress="127.0.0.1";  //FOR LOCAL TESTING
+    //private static String hostipaddress="192.168.0.1";  //FOR OKEANOS
     private static Logger log = null;
     private static int m = 11;
 
