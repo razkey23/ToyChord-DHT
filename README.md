@@ -22,8 +22,8 @@ For the implementation of ToyChord we used Java RMI. A bootstrap node is used wh
 
 Two maven projects are included in this repo ,one for BootstrapNode and the other for the Peer nodes. The source code of BootstrapNode is similar to ChordNodePeer. The main difference is in pom.xml . Bootstrap node's code has  BootstrapnodeImpl as main class , while ChordNodePeer code has ChordNodeImpl as main class.
  
- *ChordDHT/ChordDHT-master* : See Readme.md in this directory for code explanation
- *ChordDHTPeer/ChordDHT-master*: See Readme.md in this directory for code explanation
+ * *ChordDHT/ChordDHT-master* : See Readme.md in this directory for code explanation
+ * *ChordDHTPeer/ChordDHT-master*: See Readme.md in this directory for code explanation
  
 ## ToyChord Deployment
  
