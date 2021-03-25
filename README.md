@@ -80,3 +80,42 @@ Now on every Peer-node we are equipped with a command line tool where we have th
 10. Overlay (See the Ring Topology)
 
 ## ToyChord Testing
+After deploying ToyChord we wanted to test how throughput is affected from the two replication policies.Therefore, we used the options 6,7,8 from a Peer's CLI to execute inserts,queries and a combination of the two respectively from random Peer Nodes and measure the average time it took per one such request.
+### Experiment 1
+We used insert.txt from transactions/ and measure the throughput for the following ToyChord Deployments.
+|Replication Policy| Replication Factor|
+|-|-|
+|Chain Replication|1,3,5|
+|Eventual Replication|1,3,5| 
+
+In total we used insert.txt for 6 different setups and the results are the following :
+
+![inserts-txt](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/inserts.png?raw=true)
+
+Obviously throughput with replication factor 1 is practically the same for both chain and eventual replication (practically there is no replication). When it comes to replication factor 3 chain replication has a decreased throughput (it takes more time per insertion) compared to eventual which is expected since in chain replication we wait until all the replicas are put in the proper Node while on eventual consistency insert process returns after the <key,pair> is inserted without caring too much about the replicas. Same applies to replication factor 5. Even though in eventual consistency the insert process returns immediately after finding the Replica Manager for the <key,value> pair , a rise in latency (decrease in throughput) was expected when increasing the replication factor due to the average traffic surge in the network.
+
+### Experiment 2
+We used query.txt from transactions/ and measure the throughput for the following ToyChord Deployments.
+|Replication Policy| Replication Factor|
+|-|-|
+|Chain Replication|1,3,5|
+|Eventual Replication|1,3,5|
+
+In total we used insert.txt for 6 different setups and the results are the following :
+![inserts-txt](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/query.png?raw=true)
+
+The results shown above were expected.Results are pretty straight-forward and easy to interpret. Read throughput decreases using chain replication policy because ensuring always-fresh reads demands extra latency.On the contrary read throughput increases using the eventual consistency policy since there are more nodes carrying a replica and we do not demand reading non-stale values.
+
+### Experiment 3
+Last experiment was to check how many dirty reads will occur and the average throughput while inserting and querying <key,value> Pairs. We used requests.txt from transactions/ and measure the dirty-reads and average time (per action) for the following ToyChord Deployments.
+|Replication Policy| Replication Factor|
+|-|-|
+|Chain Replication|3|
+|Eventual Replication|3| 
+
+In total we used request.txt for 2 different setups and the results are the following :
+![requests-png](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/requests.png?raw=true)
+
+![requests-stale](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/dirty-reads.png?raw=true)
+
+Obviously inserts seem slower that queries which is expected. We have 0 dirty-reads when using chain replication policy on the expense of higher latencies , and 4 dirty-reads when using eventual consistency which sacrifices absolute consistency to achieve a high query throughput. 
