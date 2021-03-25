@@ -775,7 +775,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 entry.put(key,pair);
                 data_rwlock.writeLock().unlock();
             }
-            System.out.println(System.nanoTime());
+            //System.out.println(System.nanoTime());
             return res;
         }
         else {
@@ -809,7 +809,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                     }).start();
                 }
             }
-            System.out.println(System.nanoTime());
+            //System.out.println(System.nanoTime());
             return res;            
         }
     }
