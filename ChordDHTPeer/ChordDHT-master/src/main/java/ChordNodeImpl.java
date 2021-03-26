@@ -124,7 +124,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
         String nodeIPAddress = args[0];
         hostipaddress = args[1];
 	    String hosturl="rmi://"+hostipaddress+"/";
-        replication_Factor = args[2].equals("1") ? 0 : args[2].equals("3") ? 2 : 4;
+        replication_Factor = args[2].equals("1") ? 0 : args[2].equals("5") ? 4 : args[2].equals("3") ? 2 : 1;
         if(args.length < 4) chain_replication = true;
         else chain_replication = false;
 
@@ -892,7 +892,7 @@ public class ChordNodeImpl extends UnicastRemoteObject implements ChordNode {
                 }
                 else {
                     val = pair.getValue();
-                    val = val + ' ' + pair.getKey();
+                   // val = val + ' ' + pair.getKey();
                 }
             }
             else {
@@ -1099,7 +1099,16 @@ public void migrate_keys(NodeInfo pred, NodeInfo newNode, Integer replication_nu
                 temp2 = new String("\tReplica: " + pair.getKey());
                 temp3 = new String("\tActual Value: " + pair.getValue());
             }
-            accum+=temp+temp1+temp2+temp3+"\n";
+            if (accum.equals("")) {
+                accum+=temp+temp1+temp2+temp3+"\n";
+            }
+            else {
+                String check= temp+temp1+temp2+temp3+"\n";
+                if (accum.contains(check)==false) {
+                    accum+=temp+temp1+temp2+temp3+"\n";
+                }
+            }
+            //accum+=temp+temp1+temp2+temp3+"\n";
         }
         return start+accum+String.valueOf(i)+"***************************\n" ;
     } 
