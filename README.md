@@ -85,8 +85,8 @@ After deploying ToyChord we wanted to test how throughput is affected from the t
 We used insert.txt from transactions/ and measure the throughput for the following ToyChord Deployments.
 |Replication Policy| Replication Factor|
 |-|-|
-|Chain Replication|1,3,5|
-|Eventual Replication|1,3,5| 
+|Chain Replication (linearizability)|1,3,5|
+|Eventual Consistency|1,3,5| 
 
 In total we used insert.txt for 6 different setups and the results are the following :
 
@@ -98,8 +98,8 @@ Obviously throughput with replication factor 1 is practically the same for both 
 We used query.txt from transactions/ and measure the throughput for the following ToyChord Deployments.
 |Replication Policy| Replication Factor|
 |-|-|
-|Chain Replication|1,3,5|
-|Eventual Replication|1,3,5|
+|Chain Replication (linearizability)|1,3,5|
+|Eventual Consistency|1,3,5|
 
 In total we used insert.txt for 6 different setups and the results are the following :
 ![inserts-txt](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/query.png?raw=true)
@@ -110,8 +110,8 @@ The results shown above were expected.Results are pretty straight-forward and ea
 Last experiment was to check how many dirty reads will occur and the average throughput while inserting and querying <key,value> Pairs. We used requests.txt from transactions/ and measure the dirty-reads and average time (per action) for the following ToyChord Deployments.
 |Replication Policy| Replication Factor|
 |-|-|
-|Chain Replication|3|
-|Eventual Replication|3| 
+|Chain Replication (linearizability)|3|
+|Eventual Consistency|3| 
 
 In total we used request.txt for 2 different setups and the results are the following :
 ![requests-png](https://github.com/razkey23/ToyChord-DHT/blob/main/resources/requests.png?raw=true)
