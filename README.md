@@ -1,5 +1,5 @@
 # ToyChord-DHT
-## Project Summary
+## Project Summary (JAVA RMI - Distributed Systems)
 This project is the implementation of ToyChord , it's a simplified / lightweight version of Chord. The main purpose of Toychord is to create a Chord-like ring of nodes. Every Chord-node  should be able to do the following actions :
 * Have a distinct id after applying a hash function to his IP and Open Socket
 * Join the ring 
